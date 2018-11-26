@@ -93,5 +93,5 @@ class CDSSM(nn.Module):
         with_gamma = self.learn_gamma(dots)
         
         # Finally, we use the softmax function to calculate P(D+|Q).
-        prob = F.softmax(with_gamma)
-        return prob
+        #prob = F.logsigmoid(with_gamma)
+        return with_gamma 

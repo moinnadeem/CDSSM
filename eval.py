@@ -39,23 +39,21 @@ nltk.data.path.append('/usr/users/mnadeem/nltk_data/')
 def run():
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
-    BATCH_SIZE = 8
-    NUM_EPOCHS = 2
-
-    logger = Logger('./logs/{}'.format(time.localtime()))
+    BATCH_SIZE = 8 
+    NUM_EPOCHS = 1
 
     print("Created model...")
     model = cdssm.CDSSM()
     model = model.cuda()
     model = model.to(device)
-    #model.load_state_dict(torch.load("saved_model"))
+    model.load_state_dict(torch.load("saved_model_more_examples"))
     #if torch.cuda.device_count() > 0:
     #  print("Let's use", torch.cuda.device_count(), "GPU(s)!")
     #  model = nn.DataParallel(model)
 
     print("Created dataset...")
     train_size = int(len(train) * 0.8)
-    dataset = pytorch_data_loader.WikiDataset(train[:train_size], claims_dict, data_batch_size=8) 
+    dataset = pytorch_data_loader.WikiDataset(train[train_size:], claims_dict, data_batch_size=8) 
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, num_workers=3, shuffle=True, collate_fn=pytorch_data_loader.variable_collate)
 
     LETTER_GRAM_SIZE = 3 # See section 3.2.
@@ -69,63 +67,40 @@ def run():
     J = 4 # Number of random unclicked documents serving as negative examples for a query. See section 4.
     FILTER_LENGTH = 1 # We only consider one time step for convolutions.
 
-    # Loss and optimizer
-    criterion = torch.nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
-
     OUTPUT_FREQ = int((len(dataset)/BATCH_SIZE)*0.02) 
 
+    true = []
+    pred = []
     print("Training...")
-    running_loss = 0.0
     running_accuracy = 0.0
-    for epoch in range(NUM_EPOCHS):
-        for batch_num, inputs in enumerate(dataloader):
-            claims, evidences, labels = inputs  
+    num_batches = 0
+    for batch_num, inputs in tqdm(enumerate(dataloader), total=(len(dataset)/BATCH_SIZE)):
+        num_batches += 1
+        claims, evidences, labels = inputs  
 
-            claims = claims.to(device) 
-            evidences = evidences.to(device) 
-            claims = claims.cuda()
-            evidences = evidences.cuda()
-            labels = labels.to(device)
-            labels = labels.cuda()
+        claims = claims.to(device) 
+        evidences = evidences.to(device) 
+        claims = claims.cuda()
+        evidences = evidences.cuda()
+        labels = labels.to(device)
+        labels = labels.cuda()
 
-            y_pred = model(claims, evidences)
+        y_pred = model(claims, evidences)
 
-            y = (labels)
-            y_pred = y_pred.squeeze()
-            y = y.squeeze()
-            y = y.view(-1)
-            y_pred = y_pred.view(-1)
+        y = (labels)
+        y_pred = y_pred.squeeze()
+        y = y.squeeze()
+        y = y.view(-1)
+        y_pred = y_pred.view(-1)
+        bin_acc = F.sigmoid(y_pred).round()
 
-            loss = criterion(y_pred, y)
+        true.extend(y.tolist())
+        pred.extend(bin_acc.tolist())
 
-            bin_acc = F.sigmoid(y_pred).round()
-            accuracy = (y==bin_acc).float().mean()
-            running_accuracy += accuracy
-            running_loss += loss.item()
-
-            if (batch_num % OUTPUT_FREQ)==0 and batch_num>0:
-                print("[{}:{}] loss: {}, accuracy: {}".format(epoch, batch_num / (len(dataset)/BATCH_SIZE), running_loss/OUTPUT_FREQ, running_accuracy/OUTPUT_FREQ))
-
-                # 1. Log scalar values (scalar summary)
-                info = { 'loss': running_loss/OUTPUT_FREQ, 'accuracy': running_accuracy/OUTPUT_FREQ }
-
-                for tag, value in info.items():
-                    logger.scalar_summary(tag, value, batch_num+1)
-
-                # 2. Log values and gradients of the parameters (histogram summary)
-                for tag, value in model.named_parameters():
-                    tag = tag.replace('.', '/')
-                    logger.histo_summary(tag, value.data.cpu().numpy(), batch_num+1)
-                    logger.histo_summary(tag+'/grad', value.grad.data.cpu().numpy(), batch_num+1)
-
-                running_loss = 0.0
-                running_accuracy = 0.0
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-    torch.save(model.state_dict(), "saved_model_more_examples")
+        accuracy = (y==bin_acc).float().mean()
+        running_accuracy += accuracy
+    print("Final accuracy: {}".format(running_accuracy / num_batches))
+    joblib.dump({"true": true, "pred": pred}, "predicted_labels.pkl")
 
 if __name__=="__main__":
     try:

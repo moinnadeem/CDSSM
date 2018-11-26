@@ -24,13 +24,6 @@ def variable_collate(batch):
     claims= torch.from_numpy(claims).float()
     evidences = torch.from_numpy(evidences).float()
 
-    #claims = claims.to(self.device) 
-    #evidence = evidence.to(self.device) 
-    #claim = claim.cuda()
-    #evidences = evidences.cuda()
-    #labels = labels.to(self.device)
-    #labels = labels.cuda()
-
     return [claims, evidences, labels]
     
 
@@ -38,7 +31,7 @@ class WikiDataset(Dataset):
     """
     Generates data with batch size of 1 sample for the purposes of training our model.
     """
-    def __init__(self, data, claims_dict, data_batch_size=10, batch_size=32, split=None):
+    def __init__(self, data, claims_dict, data_batch_size=10, batch_size=32, split=None, randomize=True):
         """
             Sets the initial arguments and creates
             an indicies array to randomize the dataset
@@ -49,6 +42,7 @@ class WikiDataset(Dataset):
         else:
             self.indicies = list(range(len(data)))
         self.data = data
+        self.randomize = randomize
         use_cuda = True
         self.device = torch.device("cuda:0" if use_cuda else "cpu")
         self.data_batch_size = data_batch_size
@@ -75,24 +69,23 @@ class WikiDataset(Dataset):
 
         evidences = []
         labels = []
+        claims = []
+        num_pos = min(len(self.claim_to_article[d['claim']]), 4)
+        for idx in range(num_pos):
+            processed = self.claim_to_article[d['claim']][idx]
+            evidence = self.encoder.tokenize_claim(processed)
+            evidence = sparse.vstack(evidence)
+            evidence = evidence.toarray()
+            evidences.append(evidence)
+            claims.append(claim)
+            labels.append(1)
 
-        processed = self.claim_to_article[d['claim']][0]
-        evidence = self.encoder.tokenize_claim(processed)
-        evidence = sparse.vstack(evidence)
-        evidence = evidence.toarray()
-        evidences.append(evidence)
-        labels.append(1)
-
-        #evidence = to_torch_sparse_tensor(evidence, device=self.device)
-        #dense_arrs = [i.toarray() for i in evidence]
-        #stacked_arr = np.vstack(dense_arrs)
-        #evidences.append(stacked_arr)
-         
-
-        claims = [claim]
         try:
-            for j in range(self.data_batch_size-1):
-                e = np.random.choice(d['evidence'])
+            for j in range(num_pos, self.data_batch_size):
+                if self.randomize:
+                    e = np.random.choice(d['evidence'])
+                else:
+                    e = d['evidence'][j]
                 processed = utils.preprocess_article_name(e.split("http://wikipedia.org/wiki/")[1])
                 #evidence = articles_dict[processed]
                 evidence = self.encoder.tokenize_claim(processed)
@@ -106,19 +99,6 @@ class WikiDataset(Dataset):
         except ValueError:
             print(index) 
 
-        #evidences = stack_uneven(evidences)
-        #evidences = torch.from_numpy(evidences).float()
-
-        #claim = claim.to(self.device) 
-        #evidence = evidence.to(self.device) 
-        #claim = claim.cuda()
-        #evidences = evidences.cuda()
-        #labels = torch.FloatTensor(labels, device=self.device).to(self.device)
-
-        #claim = claim.to_dense()
-
-        #evidences = stack_uneven(evidences)
-        #claim = np.broadcast_to(claim, (len(evidences), claim.shape[0], claim.shape[1]))
         #claim = claim.expand(evidences.shape[0], claim.shape[0], claim.shape[1])
         return claims, evidences, labels 
 
@@ -149,11 +129,13 @@ def stack_uneven(arrays, fill_value=0.):
     '''
     sizes = [a.shape for a in arrays]
     max_sizes = np.max(list(zip(*sizes)), -1)
+
     # The resultant array has stacked on the first dimension
     result = np.full((len(arrays),) + tuple(max_sizes), fill_value)
     for i, a in enumerate(arrays):
       # The shape of this array `a`, turned into slices
       slices = tuple(slice(0,s) for s in sizes[i])
+
       # Overwrite a block slice of `result` with this array `a`
       result[i][slices] = a
     return result
