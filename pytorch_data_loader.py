@@ -49,7 +49,7 @@ class WikiDataset(Dataset):
         self.encoder = utils.ClaimEncoder()
         self.claims_dict = claims_dict
         self.batch_size = batch_size
-        _, _, _, _, self.claim_to_article = utils.extract_fever_jsonl_data("../train.jsonl")
+        _, _, _, _, self.claim_to_article = utils.extract_fever_jsonl_data("train.jsonl")
         
     def __len__(self):
         return len(self.data)

@@ -22,6 +22,7 @@ import torchvision.datasets as dsets
 import torchvision.transforms as transforms
 from joblib import Parallel, delayed
 from logger import Logger
+from hyperdash import Experiment, monitor
 from scipy import sparse
 from sys import argv
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
@@ -31,16 +32,30 @@ from tqdm import tqdm, tqdm_notebook
 
 import cdssm
 import pytorch_data_loader
+import argparse
 import utils
 
 torch.backends.cudnn.benchmark=True
 nltk.data.path.append('/usr/users/mnadeem/nltk_data/')
 
+def parse_args():
+    parser = argparse.ArgumentParser(description='Learning the optimal convolution for network.')
+    parser.add_argument("--batch-size", type=int, help="Number of queries per batch.", default=1)
+    parser.add_argument("--data-batch-size", type=int, help="Number of examples per query.", default=8)
+    parser.add_argument("--learning-rate", type=float, help="Learning rate for model.", default=1e-3)
+    parser.add_argument("--epochs", type=int, help="Number of epochs to learn for.", default=3)
+    parser.add_argument("--data", help="Training dataset to load file from.", default="train.pkl")
+    return parser.parse_args()
+
+@monitor("CLSM V2")
 def run():
+    BATCH_SIZE = args.batch_size
+    LEARNING_RATE = args.learning_rate
+    DATA_BATCH_SIZE = args.data_batch_size
+    NUM_EPOCHS = args.epochs
+    
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
-    BATCH_SIZE = 8
-    NUM_EPOCHS = 2
 
     logger = Logger('./logs/{}'.format(time.localtime()))
 
@@ -55,31 +70,30 @@ def run():
 
     print("Created dataset...")
     train_size = int(len(train) * 0.8)
-    dataset = pytorch_data_loader.WikiDataset(train[:train_size], claims_dict, data_batch_size=8) 
-    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, num_workers=3, shuffle=True, collate_fn=pytorch_data_loader.variable_collate)
-
-    LETTER_GRAM_SIZE = 3 # See section 3.2.
-    WINDOW_SIZE = 3 # See section 3.2.
-    TOTAL_LETTER_GRAMS = int(29243) # Determined from data. See section 3.2.
-    WORD_DEPTH = WINDOW_SIZE * TOTAL_LETTER_GRAMS # See equation (1).
-
-    # WORD_DEPTH = 1000
-    K = 300 # Dimensionality of the max-pooling layer. See section 3.4.
-    L = 128 # Dimensionality of latent semantic space. See section 3.5.
-    J = 4 # Number of random unclicked documents serving as negative examples for a query. See section 4.
-    FILTER_LENGTH = 1 # We only consider one time step for convolutions.
+    train_dataset = pytorch_data_loader.WikiDataset(train[:train_size], claims_dict, data_batch_size=DATA_BATCH_SIZE) 
+    val_dataset = pytorch_data_loader.WikiDataset(train[train_size:], claims_dict, data_batch_size=DATA_BATCH_SIZE) 
+    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=5, shuffle=True, collate_fn=pytorch_data_loader.variable_collate)
+    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=5, shuffle=True, collate_fn=pytorch_data_loader.variable_collate)
 
     # Loss and optimizer
     criterion = torch.nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
 
-    OUTPUT_FREQ = int((len(dataset)/BATCH_SIZE)*0.02) 
+    OUTPUT_FREQ = int((len(train_dataset)/BATCH_SIZE)*0.02) 
+    parameters = {"batch size": BATCH_SIZE, "epochs": NUM_EPOCHS, "learning rate": LEARNING_RATE, "optimizer": optimizer.__class__.__name__, "loss": criterion.__class__.__name__, "training size": train_size, "data batch size": DATA_BATCH_SIZE, "data": args.data}
+    exp_params = {}
+    exp = Experiment("CLSM V2")
+    for key, value in parameters.items():
+       exp_params[key] = exp.param(key, value) 
 
     print("Training...")
-    running_loss = 0.0
-    running_accuracy = 0.0
+    train_running_loss = 0.0
+    train_running_accuracy = 0.0
+    val_running_loss = 0.0
+    val_running_accuracy = 0.0
+
     for epoch in range(NUM_EPOCHS):
-        for batch_num, inputs in enumerate(dataloader):
+        for train_batch_num, inputs in enumerate(train_dataloader):
             claims, evidences, labels = inputs  
 
             claims = claims.to(device) 
@@ -101,51 +115,85 @@ def run():
 
             bin_acc = F.sigmoid(y_pred).round()
             accuracy = (y==bin_acc).float().mean()
-            running_accuracy += accuracy
-            running_loss += loss.item()
+            train_running_accuracy += accuracy.item()
+            train_running_loss += loss.item()
 
-            if (batch_num % OUTPUT_FREQ)==0 and batch_num>0:
-                print("[{}:{}] loss: {}, accuracy: {}".format(epoch, batch_num / (len(dataset)/BATCH_SIZE), running_loss/OUTPUT_FREQ, running_accuracy/OUTPUT_FREQ))
+            if (train_batch_num % OUTPUT_FREQ)==0 and train_batch_num>0:
+                print("[{}:{}] training loss: {}, training accuracy: {}".format(epoch, train_batch_num / (len(train_dataset)/BATCH_SIZE), train_running_loss/OUTPUT_FREQ, train_running_accuracy/OUTPUT_FREQ))
 
                 # 1. Log scalar values (scalar summary)
-                info = { 'loss': running_loss/OUTPUT_FREQ, 'accuracy': running_accuracy/OUTPUT_FREQ }
+                info = { 'train_loss': train_running_loss/OUTPUT_FREQ, 'train_accuracy': train_running_accuracy/OUTPUT_FREQ }
 
                 for tag, value in info.items():
-                    logger.scalar_summary(tag, value, batch_num+1)
+                    exp.metric(tag, value, log=False)
+                    logger.scalar_summary(tag, value, train_batch_num+1)
 
                 # 2. Log values and gradients of the parameters (histogram summary)
                 for tag, value in model.named_parameters():
                     tag = tag.replace('.', '/')
-                    logger.histo_summary(tag, value.data.cpu().numpy(), batch_num+1)
-                    logger.histo_summary(tag+'/grad', value.grad.data.cpu().numpy(), batch_num+1)
+                    logger.histo_summary(tag, value.data.cpu().numpy(), train_batch_num+1)
+                    logger.histo_summary(tag+'/grad', value.grad.data.cpu().numpy(), train_batch_num+1)
 
-                running_loss = 0.0
-                running_accuracy = 0.0
+                train_running_loss = 0.0
+                train_running_accuracy = 0.0
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-    torch.save(model.state_dict(), "saved_model_more_examples")
+        print("Running validation...")
+        for val_batch_num, val_inputs in enumerate(val_dataloader):
+            claims, evidences, labels = inputs  
+
+            claims = claims.to(device) 
+            evidences = evidences.to(device) 
+            claims = claims.cuda()
+            evidences = evidences.cuda()
+            labels = labels.to(device)
+            labels = labels.cuda()
+
+            y_pred = model(claims, evidences)
+
+            y = (labels)
+            y_pred = y_pred.squeeze()
+            y = y.squeeze()
+            y = y.view(-1)
+            y_pred = y_pred.view(-1)
+
+            bin_acc = F.sigmoid(y_pred).round()
+            accuracy = (y==bin_acc).float().mean()
+            val_running_accuracy += accuracy.item()
+            val_running_loss += loss.item()
+
+            if (val_batch_num % OUTPUT_FREQ)==0 and val_batch_num>0:
+                print("[{}:{}] loss: {}, accuracy: {}".format(epoch, val_batch_num / (len(val_dataset)/BATCH_SIZE), val_running_loss/OUTPUT_FREQ, val_running_accuracy/OUTPUT_FREQ))
+
+                # 1. Log scalar values (scalar summary)
+                info = { 'val_loss': val_running_loss/OUTPUT_FREQ, 'val_accuracy': val_running_accuracy/OUTPUT_FREQ }
+
+                for tag, value in info.items():
+                    exp.metric(tag, value, log=False)
+                    logger.scalar_summary(tag, value, val_batch_num+1)
+
+                # 2. Log values and gradients of the parameters (histogram summary)
+                for tag, value in model.named_parameters():
+                    tag = tag.replace('.', '/')
+                    logger.histo_summary(tag, value.data.cpu().numpy(), val_batch_num+1)
+                    logger.histo_summary(tag+'/grad', value.grad.data.cpu().numpy(), val_batch_num+1)
+
+                val_running_loss = 0.0
+                val_running_accuracy = 0.0
+
+    model_str = "saved_model" 
+    for key, value in parameters.items():
+        model_str += "_{}-{}".format(key.replace(" ", "_"), value)
+
+    torch.save(model.state_dict(), model_str)
 
 if __name__=="__main__":
-    try:
-        train 
-    except:
-        s = ""
-        f = ""
-        if len(argv)==1:
-            s = "Loading large training data.."
-            f = "train.pkl"
-        else:
-            if argv[1]=="-m":
-                s = "Loading medium training data..."
-                f = "train_medium.pkl"
-            elif argv[1]=="-m":
-                s = "Loading small training data..."
-                f = "train_small.pkl"
+    args = parse_args()
 
-        print(s)
-        train = joblib.load(f)
+    print("Loading {}".format(args.data))
+    train = joblib.load(args.data)
 
     try:
         claims_dict
