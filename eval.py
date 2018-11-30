@@ -22,6 +22,7 @@ import torchvision.datasets as dsets
 import torchvision.transforms as transforms
 from joblib import Parallel, delayed
 from logger import Logger
+from hyperdash import Experiment, monitor
 from scipy import sparse
 from sys import argv
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
@@ -31,50 +32,64 @@ from tqdm import tqdm, tqdm_notebook
 
 import cdssm
 import pytorch_data_loader
+import argparse
 import utils
 
 torch.backends.cudnn.benchmark=True
 nltk.data.path.append('/usr/users/mnadeem/nltk_data/')
 
+def parse_args():
+    parser = argparse.ArgumentParser(description='Learning the optimal convolution for network.')
+    parser.add_argument("--batch-size", type=int, help="Number of queries per batch.", default=1)
+    parser.add_argument("--data-batch-size", type=int, help="Number of examples per query.", default=8)
+    parser.add_argument("--learning-rate", type=float, help="Learning rate for model.", default=1e-3)
+    parser.add_argument("--epochs", type=int, help="Number of epochs to learn for.", default=3)
+    parser.add_argument("--data", help="Training dataset to load file from.", default="shared_task_dev.pkl")
+    parser.add_argument("--model", help="Model to evaluate.") 
+    return parser.parse_args()
+
+@monitor("CLSM Test")
 def run():
+    BATCH_SIZE = args.batch_size
+    LEARNING_RATE = args.learning_rate
+    DATA_BATCH_SIZE = args.data_batch_size
+    NUM_EPOCHS = args.epochs
+    MODEL = args.model
+
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
-    BATCH_SIZE = 8 
-    NUM_EPOCHS = 1
+
+    logger = Logger('./logs/{}'.format(time.localtime()))
 
     print("Created model...")
     model = cdssm.CDSSM()
     model = model.cuda()
     model = model.to(device)
-    model.load_state_dict(torch.load("saved_model_more_examples"))
+    model.load_state_dict(torch.load(MODEL))
     #if torch.cuda.device_count() > 0:
     #  print("Let's use", torch.cuda.device_count(), "GPU(s)!")
     #  model = nn.DataParallel(model)
 
     print("Created dataset...")
-    train_size = int(len(train) * 0.8)
-    dataset = pytorch_data_loader.WikiDataset(train[train_size:], claims_dict, data_batch_size=8) 
+    dataset = pytorch_data_loader.WikiDataset(test, claims_dict, data_batch_size=DATA_BATCH_SIZE, testFile="shared_task_dev.jsonl") 
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, num_workers=3, shuffle=True, collate_fn=pytorch_data_loader.variable_collate)
 
-    LETTER_GRAM_SIZE = 3 # See section 3.2.
-    WINDOW_SIZE = 3 # See section 3.2.
-    TOTAL_LETTER_GRAMS = int(29243) # Determined from data. See section 3.2.
-    WORD_DEPTH = WINDOW_SIZE * TOTAL_LETTER_GRAMS # See equation (1).
-
-    # WORD_DEPTH = 1000
-    K = 300 # Dimensionality of the max-pooling layer. See section 3.4.
-    L = 128 # Dimensionality of latent semantic space. See section 3.5.
-    J = 4 # Number of random unclicked documents serving as negative examples for a query. See section 4.
-    FILTER_LENGTH = 1 # We only consider one time step for convolutions.
-
     OUTPUT_FREQ = int((len(dataset)/BATCH_SIZE)*0.02) 
+    criterion = torch.nn.BCEWithLogitsLoss()
+
+    parameters = {"batch size": BATCH_SIZE, "loss": criterion.__class__.__name__, "data batch size": DATA_BATCH_SIZE, "data": args.data}
+    exp_params = {}
+    exp = Experiment("CLSM V2")
+    for key, value in parameters.items():
+       exp_params[key] = exp.param(key, value) 
 
     true = []
     pred = []
     print("Training...")
-    running_accuracy = 0.0
+    test_running_accuracy = 0.0
+    test_running_loss = 0.0
     num_batches = 0
-    for batch_num, inputs in tqdm(enumerate(dataloader), total=(len(dataset)/BATCH_SIZE)):
+    for batch_num, inputs in enumerate(dataloader):
         num_batches += 1
         claims, evidences, labels = inputs  
 
@@ -94,39 +109,52 @@ def run():
         y_pred = y_pred.view(-1)
         bin_acc = F.sigmoid(y_pred).round()
 
+        loss = criterion(y_pred, y)
+
         true.extend(y.tolist())
         pred.extend(bin_acc.tolist())
 
         accuracy = (y==bin_acc).float().mean()
-        running_accuracy += accuracy
-    print("Final accuracy: {}".format(running_accuracy / num_batches))
-    joblib.dump({"true": true, "pred": pred}, "predicted_labels.pkl")
+        test_running_accuracy += accuracy.item()
+        test_running_loss += loss.item() 
+
+        
+        if batch_num % OUTPUT_FREQ==0 and batch_num>0:
+            print("[{}]: {}".format(batch_num, test_running_accuracy / num_batches))
+
+            # 1. Log scalar values (scalar summary)
+            info = { 'test_loss': test_running_loss/OUTPUT_FREQ, 'test_accuracy': test_running_accuracy/OUTPUT_FREQ }
+
+            for tag, value in info.items():
+                exp.metric(tag, value, log=False)
+                logger.scalar_summary(tag, value, batch_num+1)
+
+            # 2. Log values and gradients of the parameters (histogram summary)
+            for tag, value in model.named_parameters():
+                tag = tag.replace('.', '/')
+                logger.histo_summary(tag, value.data.cpu().numpy(), batch_num+1)
+
+            test_running_loss = 0.0
+            test_running_accuracy = 0.0
+
+    print("Final accuracy: {}".format(test_running_accuracy / num_batches))
+    filename = "predicted_labels"
+    for key, value in parameters.items():
+        filename += "_{}-{}".format(key.replace(" ", "_"), value)
+
+    joblib.dump({"true": true, "pred": pred}, filename)
 
 if __name__=="__main__":
-    try:
-        train 
-    except:
-        s = ""
-        f = ""
-        if len(argv)==1:
-            s = "Loading large training data.."
-            f = "train.pkl"
-        else:
-            if argv[1]=="-m":
-                s = "Loading medium training data..."
-                f = "train_medium.pkl"
-            elif argv[1]=="-m":
-                s = "Loading small training data..."
-                f = "train_small.pkl"
+    args = parse_args()
 
-        print(s)
-        train = joblib.load(f)
+    print("Loading {}".format(args.data))
+    test = joblib.load(args.data)
 
     try:
         claims_dict
     except:
-        print("Loading claims data...")
-        claims_dict = joblib.load("claims_dict.pkl")
+        print("Loading validation claims data...")
+        claims_dict = joblib.load("val_dict.pkl")
 
     torch.multiprocessing.set_start_method("fork", force=True)
     run()

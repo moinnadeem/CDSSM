@@ -31,7 +31,7 @@ class WikiDataset(Dataset):
     """
     Generates data with batch size of 1 sample for the purposes of training our model.
     """
-    def __init__(self, data, claims_dict, data_batch_size=10, batch_size=32, split=None, randomize=True):
+    def __init__(self, data, claims_dict, data_batch_size=10, batch_size=32, split=None, randomize=True, testFile="train.jsonl"):
         """
             Sets the initial arguments and creates
             an indicies array to randomize the dataset
@@ -49,7 +49,7 @@ class WikiDataset(Dataset):
         self.encoder = utils.ClaimEncoder()
         self.claims_dict = claims_dict
         self.batch_size = batch_size
-        _, _, _, _, self.claim_to_article = utils.extract_fever_jsonl_data("train.jsonl")
+        _, _, _, _, self.claim_to_article = utils.extract_fever_jsonl_data(testFile)
         
     def __len__(self):
         return len(self.data)
@@ -62,10 +62,7 @@ class WikiDataset(Dataset):
         item_index = index 
         
         d = self.data[item_index]
-        try:
-            claim = (self.claims_dict[utils.preprocess_article_name(d['claim']) + " "]).toarray()
-        except KeyError:
-            return self.get_item(index+1)
+        claim = (self.claims_dict[utils.preprocess_article_name(d['claim'])]).toarray()
 
         evidences = []
         labels = []
@@ -89,15 +86,19 @@ class WikiDataset(Dataset):
                 processed = utils.preprocess_article_name(e.split("http://wikipedia.org/wiki/")[1])
                 #evidence = articles_dict[processed]
                 evidence = self.encoder.tokenize_claim(processed)
-                evidence = sparse.vstack(evidence).toarray() 
-                evidences.append(evidence)
-                claims.append(claim)
-                if processed in self.claim_to_article[d['claim']]:
-                    labels.append(1)
-                else:
-                    labels.append(0)
-        except ValueError:
-            print(index) 
+                if len(evidence)>0:
+                    evidence = sparse.vstack(evidence).toarray() 
+                    evidences.append(evidence)
+                    claims.append(claim)
+                    if processed in self.claim_to_article[d['claim']]:
+                        labels.append(1)
+                    else:
+                        labels.append(0)
+        except ValueError as exp:
+            print("Data", d)
+            print("Evidence", e)
+            print("evidence", evidence)
+            print("Shape", len(evidence))
 
         #claim = claim.expand(evidences.shape[0], claim.shape[0], claim.shape[1])
         return claims, evidences, labels 

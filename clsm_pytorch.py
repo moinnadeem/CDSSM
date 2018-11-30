@@ -47,7 +47,7 @@ def parse_args():
     parser.add_argument("--data", help="Training dataset to load file from.", default="train.pkl")
     return parser.parse_args()
 
-@monitor("CLSM V2")
+@monitor("CLSM Test")
 def run():
     BATCH_SIZE = args.batch_size
     LEARNING_RATE = args.learning_rate
@@ -70,6 +70,7 @@ def run():
 
     print("Created dataset...")
     train_size = int(len(train) * 0.8)
+    #test = int(len(train) * 0.5)
     train_dataset = pytorch_data_loader.WikiDataset(train[:train_size], claims_dict, data_batch_size=DATA_BATCH_SIZE) 
     val_dataset = pytorch_data_loader.WikiDataset(train[train_size:], claims_dict, data_batch_size=DATA_BATCH_SIZE) 
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=5, shuffle=True, collate_fn=pytorch_data_loader.variable_collate)
@@ -77,7 +78,7 @@ def run():
 
     # Loss and optimizer
     criterion = torch.nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-5)
 
     OUTPUT_FREQ = int((len(train_dataset)/BATCH_SIZE)*0.02) 
     parameters = {"batch size": BATCH_SIZE, "epochs": NUM_EPOCHS, "learning rate": LEARNING_RATE, "optimizer": optimizer.__class__.__name__, "loss": criterion.__class__.__name__, "training size": train_size, "data batch size": DATA_BATCH_SIZE, "data": args.data}
@@ -199,7 +200,7 @@ if __name__=="__main__":
         claims_dict
     except:
         print("Loading claims data...")
-        claims_dict = joblib.load("claims_dict.pkl")
+        claims_dict = joblib.load("new_claims_dict.pkl")
 
     torch.multiprocessing.set_start_method("fork", force=True)
     run()

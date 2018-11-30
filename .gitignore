@@ -1,0 +1,5 @@
+**.pkl**
+__pycache__/**
+logs/**
+**saved_model**
+

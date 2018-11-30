@@ -147,7 +147,7 @@ def preprocess_article_name(s):
     s = s.replace("“", '')
     s = ''.join([i if ord(i) < 128 else ' ' for i in s])
     s = ' '.join(s.split())
-    return s.lower()
+    return s.lower().rstrip()
 
 def strip_accents(s):
     return ''.join(c for c in unicodedata.normalize('NFD', s)
