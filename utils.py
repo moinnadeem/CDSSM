@@ -1,12 +1,15 @@
 import unicodedata
 import json
 import unicodedata
+import joblib
 import string
 import pickle
 import nltk
+import numpy as np
 from scipy import sparse
+from sklearn.preprocessing import LabelEncoder
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from tqdm import tqdm_notebook
+from tqdm.autonotebook import tqdm 
 
 FEVER_LABELS = {'SUPPORTS': 0, 'REFUTES': 1}
 
@@ -40,34 +43,32 @@ class ClaimEncoder(object):
             encoded_vector.append(arr)
         return encoded_vector
     
-    def create_encodings(claims, train_dict, write_to_file=False):
-        processed_claims = utils.generate_all_tokens(claims)
+    def create_encodings(self, claims, train_dict, write_to_file=False):
+        processed_claims = generate_all_tokens(claims)
         all_evidence = []
 
-        for query in tqdm_notebook(train_dict):
-            all_evidence.extend([utils.preprocess_article_name(i) for i in query['evidence']])
+        for query in tqdm(train_dict):
+            all_evidence.extend([preprocess_article_name(i) for i in query['evidence']])
 
-        processed_claims.extend(utils.generate_all_tokens(list(set(all_evidence))))
+        processed_claims.extend(generate_all_tokens(list(set(all_evidence))))
 
         possible_tokens = list(set(processed_claims))
+        possible_tokens.append("OOV")
 
         self.encoder = LabelEncoder()
         self.encoder.fit(np.array(sorted(possible_tokens)))
         
         self.feature_encoder = {}
-        for idx, e in tqdm_notebook(enumerate(encoder.classes_)):
+        for idx, e in tqdm(enumerate(self.encoder.classes_)):
             self.feature_encoder[e] = idx
             
         if write_to_file:
-            with open("feature_encoder.pkl", "rb") as f:
-                self.feature_encoder = pickle.load(f)
+            joblib.dump(self.feature_encoder, "feature_encoder.pkl")
+            joblib.dump(self.encoder, "encoder.pkl")
             
-            with open("encoder.pkl", "rb") as f:
-                self.encoder = pickle.load(f)
-
 def generate_all_tokens(arr):
     all_tokens = []
-    for unprocessed_claim in tqdm_notebook(arr):
+    for unprocessed_claim in tqdm(arr):
         c = preprocess_article_name(unprocessed_claim)
         c = "! {} !".format(c)
         for word in c.split():
@@ -177,7 +178,7 @@ def parallel_process(array, function, n_jobs=12, use_kwargs=False, front_num=3):
         front = [function(**a) if use_kwargs else function(a) for a in array[:front_num]]
     #If we set n_jobs to 1, just run a list comprehension. This is useful for benchmarking and debugging.
     if n_jobs==1:
-        return front + [function(**a) if use_kwargs else function(a) for a in tqdm_notebook(array[front_num:])]
+        return front + [function(**a) if use_kwargs else function(a) for a in tqdm(array[front_num:])]
     #Assemble the workers
     with ProcessPoolExecutor(max_workers=n_jobs) as pool:
         #Pass the elements of array into function
@@ -192,11 +193,11 @@ def parallel_process(array, function, n_jobs=12, use_kwargs=False, front_num=3):
             'leave': True
         }
         #Print out the progress as tasks complete
-        for f in tqdm_notebook(as_completed(futures), **kwargs):
+        for f in tqdm(as_completed(futures), **kwargs):
             pass
     out = []
     #Get the results from the futures. 
-    for i, future in tqdm_notebook(enumerate(futures)):
+    for i, future in tqdm(enumerate(futures)):
         try:
             out.append(future.result())
         except Exception as e:

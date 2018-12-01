@@ -77,28 +77,22 @@ class WikiDataset(Dataset):
             claims.append(claim)
             labels.append(1)
 
-        try:
-            for j in range(num_pos, self.data_batch_size):
-                if self.randomize:
-                    e = np.random.choice(d['evidence'])
+        for j in range(num_pos, self.data_batch_size):
+            if self.randomize:
+                e = np.random.choice(d['evidence'])
+            else:
+                e = d['evidence'][j]
+            processed = utils.preprocess_article_name(e.split("http://wikipedia.org/wiki/")[1])
+            #evidence = articles_dict[processed]
+            evidence = self.encoder.tokenize_claim(processed)
+            if len(evidence)>0:
+                evidence = sparse.vstack(evidence).toarray() 
+                evidences.append(evidence)
+                claims.append(claim)
+                if processed in self.claim_to_article[d['claim']]:
+                    labels.append(1)
                 else:
-                    e = d['evidence'][j]
-                processed = utils.preprocess_article_name(e.split("http://wikipedia.org/wiki/")[1])
-                #evidence = articles_dict[processed]
-                evidence = self.encoder.tokenize_claim(processed)
-                if len(evidence)>0:
-                    evidence = sparse.vstack(evidence).toarray() 
-                    evidences.append(evidence)
-                    claims.append(claim)
-                    if processed in self.claim_to_article[d['claim']]:
-                        labels.append(1)
-                    else:
-                        labels.append(0)
-        except ValueError as exp:
-            print("Data", d)
-            print("Evidence", e)
-            print("evidence", evidence)
-            print("Shape", len(evidence))
+                    labels.append(0)
 
         #claim = claim.expand(evidences.shape[0], claim.shape[0], claim.shape[1])
         return claims, evidences, labels 
