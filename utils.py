@@ -19,11 +19,8 @@ def tokenize_helper(inp):
 
 class ClaimEncoder(object):
     def __init__(self):
-        with open("feature_encoder.pkl", "rb") as f:
-            self.feature_encoder = pickle.load(f)
-            
-        with open("encoder.pkl", "rb") as f:
-            self.encoder = pickle.load(f)
+        self.feature_encoder = joblib.load("feature_encoder.pkl")
+        self.encoder = joblib.load("encoder.pkl")
             
     def tokenize_claim(self, c):
         """

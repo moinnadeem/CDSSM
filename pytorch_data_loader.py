@@ -19,7 +19,7 @@ def variable_collate(batch):
             labels.append(l)
     claims = stack_uneven(claims)
     evidences = stack_uneven(evidences)
-    labels = torch.Tensor(labels)
+    labels = torch.Tensor(labels).long()
 
     claims= torch.from_numpy(claims).float()
     evidences = torch.from_numpy(evidences).float()
@@ -62,7 +62,10 @@ class WikiDataset(Dataset):
         item_index = index 
         
         d = self.data[item_index]
-        claim = (self.claims_dict[utils.preprocess_article_name(d['claim'])]).toarray()
+        claim = utils.preprocess_article_name(d['claim'])
+        claim = self.encoder.tokenize_claim(claim)
+        claim = sparse.vstack(claim).toarray()
+        #claim = (self.claims_dict[utils.preprocess_article_name(d['claim'])]).toarray()
 
         evidences = []
         labels = []
@@ -75,7 +78,7 @@ class WikiDataset(Dataset):
             evidence = evidence.toarray()
             evidences.append(evidence)
             claims.append(claim)
-            labels.append(1)
+            labels.append([0,1])
 
         for j in range(num_pos, self.data_batch_size):
             if self.randomize:
@@ -90,9 +93,9 @@ class WikiDataset(Dataset):
                 evidences.append(evidence)
                 claims.append(claim)
                 if processed in self.claim_to_article[d['claim']]:
-                    labels.append(1)
+                    labels.append([0,1])
                 else:
-                    labels.append(0)
+                    labels.append([1,0])
 
         #claim = claim.expand(evidences.shape[0], claim.shape[0], claim.shape[1])
         return claims, evidences, labels 

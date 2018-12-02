@@ -18,7 +18,7 @@ LETTER_GRAM_SIZE = 3 # See section 3.2.
 WINDOW_SIZE = 3 # See section 3.2.
 TOTAL_LETTER_GRAMS = 8246 # Determined from data. See section 3.2.
 WORD_DEPTH = WINDOW_SIZE * TOTAL_LETTER_GRAMS # See equation (1).
-WORD_DEPTH = 29243 # See equation (1).
+WORD_DEPTH = 29244 # See equation (1).
 # Uncomment it, if testing
 # WORD_DEPTH = 1000
 K = 300 # Dimensionality of the max-pooling layer. See section 3.4.
@@ -41,12 +41,13 @@ class CDSSM(nn.Module):
         self.doc_conv = nn.Conv1d(WORD_DEPTH, K, FILTER_LENGTH)
         self.doc_sem = nn.Linear(K, L)
         # learning gamma
-        self.learn_gamma = nn.Conv1d(1, 1, 1)
+        self.learn_gamma = nn.Conv1d(2, 2, 1)
     def forward(self, q, pos):
         # Query model. The paper uses separate neural nets for queries and documents (see section 5.2).
         # To make it compatible with Conv layer we reshape it to: (batch_size, WORD_DEPTH, query_len)
         q = q.squeeze()
         q = q.transpose(1,2)
+
         # In this step, we transform each word vector with WORD_DEPTH dimensions into its
         # convolved representation with K dimensions. K is the number of kernels/filters
         # being used in the operation. Essentially, the operation is taking the dot product
@@ -54,6 +55,7 @@ class CDSSM(nn.Module):
         # query matrix (l_Q), adding a bias vector (b_c), and then applying the tanh activation.
         # That is, h_Q = tanh(W_c • l_Q + b_c). Note: the paper does not include bias units.
         q_c = F.tanh(self.query_conv(q))
+
         # Next, we apply a max-pooling layer to the convolved query matrix.
         q_k = kmax_pooling(q_c, 2, 1)
         q_k = q_k.transpose(1,2)
@@ -61,6 +63,7 @@ class CDSSM(nn.Module):
         # is a standard neural network dense layer, i.e., y = tanh(W_s • v + b_s). Again,
         # the paper does not include bias units.
         q_s = F.tanh(self.query_sem(q_k))
+
         #q_s = q_s.resize(L)
         # # The document equivalent of the above query model for positive document
         pos = pos.squeeze()
@@ -86,12 +89,13 @@ class CDSSM(nn.Module):
         # described as a smoothing factor for the softmax function, and it's set empirically
         # on a held-out data set. We're going to learn gamma's value by pretending it's
         # a single 1 x 1 kernel.
+        dots = torch.stack([dots, dots],1)
+        dots = dots.unsqueeze(2)
 
         # We transform a scalar into a 3D vector
-        dots = dots.unsqueeze(0)
-        dots = dots.unsqueeze(0)
         with_gamma = self.learn_gamma(dots)
         
         # Finally, we use the softmax function to calculate P(D+|Q).
         #prob = F.logsigmoid(with_gamma)
+        #prob = F.softmax(with_gamma)
         return with_gamma 
