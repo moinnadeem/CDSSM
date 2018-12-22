@@ -47,7 +47,7 @@ def parse_args():
     parser.add_argument("--data", help="Training dataset to load file from.", default="train.pkl")
     return parser.parse_args()
 
-@monitor("CLSM Test")
+@monitor("CLSM")
 def run():
     BATCH_SIZE = args.batch_size
     LEARNING_RATE = args.learning_rate
@@ -63,10 +63,10 @@ def run():
     model = cdssm.CDSSM()
     model = model.cuda()
     model = model.to(device)
-    #model.load_state_dict(torch.load("saved_model"))
-    #if torch.cuda.device_count() > 0:
-    #  print("Let's use", torch.cuda.device_count(), "GPU(s)!")
-    #  model = nn.DataParallel(model)
+    model.load_state_dict(torch.load("saved_model"))
+    if torch.cuda.device_count() > 0:
+      print("Let's use", torch.cuda.device_count(), "GPU(s)!")
+      model = nn.DataParallel(model)
 
     print("Created dataset...")
     train_size = int(len(train) * 0.8)

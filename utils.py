@@ -19,11 +19,8 @@ def tokenize_helper(inp):
 
 class ClaimEncoder(object):
     def __init__(self):
-        with open("feature_encoder.pkl", "rb") as f:
-            self.feature_encoder = pickle.load(f)
-            
-        with open("encoder.pkl", "rb") as f:
-            self.encoder = pickle.load(f)
+        self.feature_encoder = joblib.load("feature_encoder.pkl")
+        self.encoder = joblib.load("encoder.pkl")
             
     def tokenize_claim(self, c):
         """
@@ -38,7 +35,11 @@ class ClaimEncoder(object):
             for idx, word in enumerate(ngram):
                 for letter_gram in nltk.ngrams("#" + word + "#", 3):
                     s = "".join(letter_gram)
-                    letter_idx = self.feature_encoder[s]
+                    if s in self.feature_encoder:
+                        letter_idx = self.feature_encoder[s]
+                    else:
+                        # note: lowercase OOV is actually in the dictionary, uppercase OOV is not in vocab.
+                        letter_idx = self.feature_encoder['OOV'] 
                     arr[idx, letter_idx] = 1
             encoded_vector.append(arr)
         return encoded_vector

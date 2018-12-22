@@ -18,7 +18,7 @@ LETTER_GRAM_SIZE = 3 # See section 3.2.
 WINDOW_SIZE = 3 # See section 3.2.
 TOTAL_LETTER_GRAMS = 8246 # Determined from data. See section 3.2.
 WORD_DEPTH = WINDOW_SIZE * TOTAL_LETTER_GRAMS # See equation (1).
-WORD_DEPTH = 29243 # See equation (1).
+WORD_DEPTH = 29244 # See equation (1).
 # Uncomment it, if testing
 # WORD_DEPTH = 1000
 K = 300 # Dimensionality of the max-pooling layer. See section 3.4.

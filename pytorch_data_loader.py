@@ -62,7 +62,7 @@ class WikiDataset(Dataset):
         item_index = index 
         
         d = self.data[item_index]
-        claim = (self.claims_dict[utils.preprocess_article_name(d['claim'])]).toarray()
+        claim = sparse.vstack(self.encoder.tokenize_claim(utils.preprocess_article_name(d['claim']))).toarray()
 
         evidences = []
         labels = []
