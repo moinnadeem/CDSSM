@@ -35,7 +35,11 @@ class ClaimEncoder(object):
             for idx, word in enumerate(ngram):
                 for letter_gram in nltk.ngrams("#" + word + "#", 3):
                     s = "".join(letter_gram)
-                    letter_idx = self.feature_encoder[s]
+                    if s in self.feature_encoder:
+                        letter_idx = self.feature_encoder[s]
+                    else:
+                        # note: lowercase OOV is actually in the dictionary, uppercase OOV is not in vocab.
+                        letter_idx = self.feature_encoder['OOV'] 
                     arr[idx, letter_idx] = 1
             encoded_vector.append(arr)
         return encoded_vector
