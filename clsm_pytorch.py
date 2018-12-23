@@ -63,7 +63,6 @@ def run():
     model = cdssm.CDSSM()
     model = model.cuda()
     model = model.to(device)
-    model.load_state_dict(torch.load("saved_model"))
     if torch.cuda.device_count() > 0:
       print("Let's use", torch.cuda.device_count(), "GPU(s)!")
       model = nn.DataParallel(model)
@@ -77,7 +76,7 @@ def run():
     val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=5, shuffle=True, collate_fn=pytorch_data_loader.variable_collate)
 
     # Loss and optimizer
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = torch.nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-5)
 
     OUTPUT_FREQ = int((len(train_dataset)/BATCH_SIZE)*0.02) 
@@ -106,14 +105,17 @@ def run():
 
             y_pred = model(claims, evidences)
 
-            y = (labels)
-            #y_pred = y_pred.squeeze(1)
-            target = torch.max(y,1)[1]
-            loss = criterion(y_pred, target.unsqueeze(1))
+            y = (labels).float()
+            y_pred = y_pred.squeeze()
+            y = y.squeeze()
+            y = y.view(-1)
+            y_pred = y_pred.view(-1)
 
-            #bin_acc = F.sigmoid(y_pred).round()
-            pred_labels = torch.max(y_pred, 1)[1]
-            accuracy = (pred_labels==target).float().mean()
+            loss = criterion(y_pred, y)
+
+            bin_acc = F.sigmoid(y_pred).round()
+            accuracy = (y==bin_acc).float()
+            accuracy = accuracy.mean()
             train_running_accuracy += accuracy.item()
             train_running_loss += loss.item()
 
@@ -152,14 +154,14 @@ def run():
 
             y_pred = model(claims, evidences)
 
-            y = (labels)
-            #y_pred = y_pred.squeeze(1)
-            target = torch.max(y,1)[1]
-            loss = criterion(y_pred, target.unsqueeze(1))
+            y = (labels).float()
+            y_pred = y_pred.squeeze()
+            y = y.squeeze()
+            y = y.view(-1)
+            y_pred = y_pred.view(-1)
 
-            #bin_acc = F.sigmoid(y_pred).round()
-            pred_labels = torch.max(y_pred, 1)[1]
-            accuracy = (pred_labels==target).float().mean()
+            bin_acc = F.sigmoid(y_pred).round()
+            accuracy = (y==bin_acc).float().mean()
             val_running_accuracy += accuracy.item()
             val_running_loss += loss.item()
 
