@@ -8,23 +8,24 @@
 
 # ## Preprocessing Data
 
+import argparse
+import os
 import pickle
+import time
 from multiprocessing import cpu_count
+from sys import argv
 
 import joblib
 import nltk
-import time
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.datasets as dsets
 import torchvision.transforms as transforms
-from joblib import Parallel, delayed
-from logger import Logger
 from hyperdash import Experiment, monitor
+from joblib import Parallel, delayed
 from scipy import sparse
-from sys import argv
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
@@ -32,8 +33,8 @@ from tqdm import tqdm, tqdm_notebook
 
 import cdssm
 import pytorch_data_loader
-import argparse
 import utils
+from logger import Logger
 
 torch.backends.cudnn.benchmark=True
 nltk.data.path.append('/usr/users/mnadeem/nltk_data/')
@@ -44,7 +45,8 @@ def parse_args():
     parser.add_argument("--data-batch-size", type=int, help="Number of examples per query.", default=8)
     parser.add_argument("--learning-rate", type=float, help="Learning rate for model.", default=1e-3)
     parser.add_argument("--epochs", type=int, help="Number of epochs to learn for.", default=3)
-    parser.add_argument("--data", help="Training dataset to load file from.", default="train.pkl")
+    parser.add_argument("--data", help="Folder dataset to load file from.", default="data/large/train.pkl")
+    parser.add_argument("--sparse-evidences", default=False, action="store_true")
     return parser.parse_args()
 
 @monitor("CLSM")
@@ -70,8 +72,8 @@ def run():
     print("Created dataset...")
     train_size = int(len(train) * 0.8)
     #test = int(len(train) * 0.5)
-    train_dataset = pytorch_data_loader.WikiDataset(train[:train_size], claims_dict, data_batch_size=DATA_BATCH_SIZE) 
-    val_dataset = pytorch_data_loader.WikiDataset(train[train_size:], claims_dict, data_batch_size=DATA_BATCH_SIZE) 
+    train_dataset = pytorch_data_loader.WikiDataset(train[:train_size], claims_dict, data_batch_size=DATA_BATCH_SIZE, sparse_evidences=sparse_evidences) 
+    val_dataset = pytorch_data_loader.WikiDataset(train[train_size:], claims_dict, data_batch_size=DATA_BATCH_SIZE, sparse_evidences=sparse_evidences) 
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=5, shuffle=True, collate_fn=pytorch_data_loader.variable_collate)
     val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=5, shuffle=True, collate_fn=pytorch_data_loader.variable_collate)
 
@@ -80,7 +82,7 @@ def run():
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-5)
 
     OUTPUT_FREQ = int((len(train_dataset)/BATCH_SIZE)*0.02) 
-    parameters = {"batch size": BATCH_SIZE, "epochs": NUM_EPOCHS, "learning rate": LEARNING_RATE, "optimizer": optimizer.__class__.__name__, "loss": criterion.__class__.__name__, "training size": train_size, "data batch size": DATA_BATCH_SIZE, "data": args.data}
+    parameters = {"batch size": BATCH_SIZE, "epochs": NUM_EPOCHS, "learning rate": LEARNING_RATE, "optimizer": optimizer.__class__.__name__, "loss": criterion.__class__.__name__, "training size": train_size, "data batch size": DATA_BATCH_SIZE, "data": args.data, "sparse_evidences": args.sparse_evidences}
     exp_params = {}
     exp = Experiment("CLSM V2")
     for key, value in parameters.items():
@@ -184,7 +186,7 @@ def run():
                 val_running_loss = 0.0
                 val_running_accuracy = 0.0
 
-    model_str = "saved_model" 
+    model_str = "models/saved_model" 
     for key, value in parameters.items():
         model_str += "_{}-{}".format(key.replace(" ", "_"), value)
 
@@ -194,7 +196,16 @@ if __name__=="__main__":
     args = parse_args()
 
     print("Loading {}".format(args.data))
-    train = joblib.load(args.data)
+    
+    fname = os.path.join(args.data,"train.pkl")
+    train = joblib.load(fname)
+
+    if args.sparse_evidences:
+        print("Loading sparse evidences...")
+        fname = os.path.join(args.data, "evidence.pkl")
+        sparse_evidences = joblib.load(fname)
+    else:
+        sparse_evidences = None
 
     try:
         claims_dict

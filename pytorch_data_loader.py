@@ -1,7 +1,9 @@
-from scipy import sparse
+import joblib
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
+from scipy import sparse
+from torch.utils.data import DataLoader, Dataset
+
 import utils
 
 #torch.multiprocessing.set_start_method("spawn")
@@ -31,7 +33,7 @@ class WikiDataset(Dataset):
     """
     Generates data with batch size of 1 sample for the purposes of training our model.
     """
-    def __init__(self, data, claims_dict, data_batch_size=10, batch_size=32, split=None, randomize=True, testFile="train.jsonl"):
+    def __init__(self, data, claims_dict, data_batch_size=10, batch_size=32, split=None, randomize=True, testFile="train.jsonl", sparse_evidences=None):
         """
             Sets the initial arguments and creates
             an indicies array to randomize the dataset
@@ -43,6 +45,10 @@ class WikiDataset(Dataset):
             self.indicies = list(range(len(data)))
         self.data = data
         self.randomize = randomize
+        if sparse_evidences:
+            self.evidence_to_sparse = sparse_evidences 
+        else:
+            self.evidence_to_sparse = None
         use_cuda = True
         self.device = torch.device("cuda:0" if use_cuda else "cpu")
         self.data_batch_size = data_batch_size
@@ -62,10 +68,10 @@ class WikiDataset(Dataset):
         item_index = index 
         
         d = self.data[item_index]
-        #claim = utils.preprocess_article_name(d['claim'])
-        #claim = self.encoder.tokenize_claim(claim)
-        #claim = sparse.vstack(claim).toarray()
-        claim = (self.claims_dict[utils.preprocess_article_name(d['claim'])]).toarray()
+        claim = utils.preprocess_article_name(d['claim'])
+        claim = self.encoder.tokenize_claim(claim)
+        claim = sparse.vstack(claim).toarray()
+        #claim = (self.claims_dict[utils.preprocess_article_name(d['claim'])]).toarray()
         #claim = sparse.vstack(self.encoder.tokenize_claim(utils.preprocess_article_name(d['claim']))).toarray()
 
         evidences = []
@@ -74,8 +80,17 @@ class WikiDataset(Dataset):
         num_pos = min(len(self.claim_to_article[d['claim']]), 4)
         for idx in range(num_pos):
             processed = self.claim_to_article[d['claim']][idx]
-            evidence = self.encoder.tokenize_claim(processed)
-            evidence = sparse.vstack(evidence)
+
+            if self.evidence_to_sparse:
+                if processed in self.evidence_to_sparse: 
+                    evidence = self.evidence_to_sparse[processed]
+                else:
+                    print("Skipping idx, keyerror")
+                    return self.get_item(index+1)
+            else:
+                evidence = self.encoder.tokenize_claim(processed)
+                evidence = sparse.vstack(evidence)
+
             evidence = evidence.toarray()
             evidences.append(evidence)
             claims.append(claim)
@@ -86,11 +101,17 @@ class WikiDataset(Dataset):
                 e = np.random.choice(d['evidence'])
             else:
                 e = d['evidence'][j]
+
             processed = utils.preprocess_article_name(e.split("http://wikipedia.org/wiki/")[1])
             #evidence = articles_dict[processed]
-            evidence = self.encoder.tokenize_claim(processed)
-            if len(evidence)>0:
+
+            if self.evidence_to_sparse:
+                evidence = self.evidence_to_sparse[processed]
+            else: 
+                evidence = self.encoder.tokenize_claim(processed)
                 evidence = sparse.vstack(evidence)
+
+            if evidence.shape[0]>0:
                 evidence = evidence.toarray() 
                 evidences.append(evidence)
                 claims.append(claim)

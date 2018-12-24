@@ -65,10 +65,10 @@ def run():
     model = cdssm.CDSSM()
     model = model.cuda()
     model = model.to(device)
+    if torch.cuda.device_count() > 0:
+      print("Let's use", torch.cuda.device_count(), "GPU(s)!")
+      model = nn.DataParallel(model)
     model.load_state_dict(torch.load(MODEL))
-    #if torch.cuda.device_count() > 0:
-    #  print("Let's use", torch.cuda.device_count(), "GPU(s)!")
-    #  model = nn.DataParallel(model)
 
     print("Created dataset...")
     dataset = pytorch_data_loader.WikiDataset(test, claims_dict, data_batch_size=DATA_BATCH_SIZE, testFile="shared_task_dev.jsonl") 
@@ -102,7 +102,7 @@ def run():
 
         y_pred = model(claims, evidences)
 
-        y = (labels)
+        y = (labels).float()
         y_pred = y_pred.squeeze()
         y = y.squeeze()
         y = y.view(-1)
