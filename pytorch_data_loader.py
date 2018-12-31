@@ -68,10 +68,11 @@ class WikiDataset(Dataset):
         item_index = index 
         
         d = self.data[item_index]  # get training item 
-        claim = utils.preprocess_article_name(d['claim'])  # preprocess the claim
-        claim = self.encoder.tokenize_claim(claim)
-        claim = sparse.vstack(claim).toarray()  # turn it into a array
-        #claim = (self.claims_dict[utils.preprocess_article_name(d['claim'])]).toarray()
+        #claim = utils.preprocess_article_name(d['claim'])  # preprocess the claim
+        #claim = self.encoder.tokenize_claim(claim)
+        #claim = sparse.vstack(claim).toarray()  # turn it into a array
+        claim = self.claims_dict[d['claim']]
+        claim = claim.toarray()
         #claim = sparse.vstack(self.encoder.tokenize_claim(utils.preprocess_article_name(d['claim']))).toarray()
 
         evidences = []
