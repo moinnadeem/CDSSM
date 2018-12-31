@@ -43,7 +43,7 @@ class WikiDataset(Dataset):
             self.indicies = split
         else:
             self.indicies = list(range(len(data)))
-        self.data = data
+        self.data = data[::-1]
         self.randomize = randomize
         if sparse_evidences:
             self.evidence_to_sparse = sparse_evidences 
@@ -67,18 +67,18 @@ class WikiDataset(Dataset):
         #data_index = index % self.data_batch_size
         item_index = index 
         
-        d = self.data[item_index]
-        claim = utils.preprocess_article_name(d['claim'])
+        d = self.data[item_index]  # get training item 
+        claim = utils.preprocess_article_name(d['claim'])  # preprocess the claim
         claim = self.encoder.tokenize_claim(claim)
-        claim = sparse.vstack(claim).toarray()
+        claim = sparse.vstack(claim).toarray()  # turn it into a array
         #claim = (self.claims_dict[utils.preprocess_article_name(d['claim'])]).toarray()
         #claim = sparse.vstack(self.encoder.tokenize_claim(utils.preprocess_article_name(d['claim']))).toarray()
 
         evidences = []
         labels = []
         claims = []
-        num_pos = min(len(self.claim_to_article[d['claim']]), 4)
-        for idx in range(num_pos):
+        num_positive_articles = min(len(self.claim_to_article[d['claim']]), 4)  # get all positive articles 
+        for idx in range(num_positive_articles):
             processed = self.claim_to_article[d['claim']][idx]
 
             if self.evidence_to_sparse:
@@ -94,9 +94,9 @@ class WikiDataset(Dataset):
             evidence = evidence.toarray()
             evidences.append(evidence)
             claims.append(claim)
-            labels.append([0,1])
+            labels.append(1)
 
-        for j in range(num_pos, self.data_batch_size):
+        for j in range(num_positive_articles, self.data_batch_size):
             if self.randomize:
                 e = np.random.choice(d['evidence'])
             else:
@@ -105,20 +105,28 @@ class WikiDataset(Dataset):
             processed = utils.preprocess_article_name(e.split("http://wikipedia.org/wiki/")[1])
             #evidence = articles_dict[processed]
 
-            if self.evidence_to_sparse:
-                evidence = self.evidence_to_sparse[processed]
-            else: 
-                evidence = self.encoder.tokenize_claim(processed)
-                evidence = sparse.vstack(evidence)
+            if processed=="":  # handle empty string case
+                evidence = sparse.coo_matrix((10, 29244))  # randomly chosen shape for array
+            else:
+                if self.evidence_to_sparse:
+                    if processed in self.evidence_to_sparse:
+                        evidence = self.evidence_to_sparse[processed]
+                    else:
+                        print(e)
+                        raise Exception("You fucked up somewhere")
+                else: 
+                    evidence = self.encoder.tokenize_claim(processed)
+                    if len(evidence)>0:
+                        evidence = sparse.vstack(evidence)
 
             if evidence.shape[0]>0:
                 evidence = evidence.toarray() 
                 evidences.append(evidence)
                 claims.append(claim)
                 if processed in self.claim_to_article[d['claim']]:
-                    labels.append([0,1])
+                    labels.append(1)
                 else:
-                    labels.append([1,0])
+                    labels.append(0)
 
         #claim = claim.expand(evidences.shape[0], claim.shape[0], claim.shape[1])
         return claims, evidences, labels 

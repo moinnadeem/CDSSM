@@ -27,6 +27,7 @@ from hyperdash import Experiment, monitor
 from joblib import Parallel, delayed
 from scipy import sparse
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+from sklearn.metrics import recall_score
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from tqdm import tqdm, tqdm_notebook
@@ -49,8 +50,15 @@ def parse_args():
     parser.add_argument("--sparse-evidences", default=False, action="store_true")
     return parser.parse_args()
 
-@monitor("CLSM")
-def run():
+def save_checkpoint(state, is_best, filename='/output/checkpoint.pth.tar'):
+    """Save checkpoint if a new best is achieved"""
+    if is_best:
+        print ("=> Saving a new best")
+        torch.save(state, filename)  # save checkpoint
+    else:
+        print ("=> Validation Accuracy did not improve")
+
+def run(args, train, sparse_evidences, claims_dict):
     BATCH_SIZE = args.batch_size
     LEARNING_RATE = args.learning_rate
     DATA_BATCH_SIZE = args.data_batch_size
@@ -79,22 +87,34 @@ def run():
 
     # Loss and optimizer
     criterion = torch.nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
 
     OUTPUT_FREQ = int((len(train_dataset)/BATCH_SIZE)*0.02) 
     parameters = {"batch size": BATCH_SIZE, "epochs": NUM_EPOCHS, "learning rate": LEARNING_RATE, "optimizer": optimizer.__class__.__name__, "loss": criterion.__class__.__name__, "training size": train_size, "data batch size": DATA_BATCH_SIZE, "data": args.data, "sparse_evidences": args.sparse_evidences}
     exp_params = {}
     exp = Experiment("CLSM V2")
+
+    model_checkpoint_dir = "models/saved_model" 
     for key, value in parameters.items():
-       exp_params[key] = exp.param(key, value) 
+        exp_params[key] = exp.param(key, value) 
+
+        if type(value)==str:
+            value = value.replace("/", "-")
+        model_checkpoint_dir += "_{}-{}".format(key.replace(" ", "_"), value)
 
     print("Training...")
-    train_running_loss = 0.0
-    train_running_accuracy = 0.0
-    val_running_loss = 0.0
-    val_running_accuracy = 0.0
+    beginning_time = 0.0
+    best_accuracy = torch.tensor(0.0, dtype=torch.float)
 
     for epoch in range(NUM_EPOCHS):
+        beginning_time = time.time()
+        mean_train_acc = 0.0
+        train_running_loss = 0.0
+        train_running_accuracy = 0.0
+        val_running_loss = 0.0
+        val_running_accuracy = 0.0
+        model.train()
+
         for train_batch_num, inputs in enumerate(train_dataloader):
             claims, evidences, labels = inputs  
 
@@ -115,35 +135,39 @@ def run():
 
             loss = criterion(y_pred, y)
 
-            bin_acc = F.sigmoid(y_pred).round()
-            accuracy = (y==bin_acc).float()
+            predictions = torch.sigmoid(y_pred).round()
+            accuracy = (y==predictions).float()
             accuracy = accuracy.mean()
             train_running_accuracy += accuracy.item()
+            mean_train_acc += accuracy.item()
             train_running_loss += loss.item()
 
             if (train_batch_num % OUTPUT_FREQ)==0 and train_batch_num>0:
-                print("[{}:{}] training loss: {}, training accuracy: {}".format(epoch, train_batch_num / (len(train_dataset)/BATCH_SIZE), train_running_loss/OUTPUT_FREQ, train_running_accuracy/OUTPUT_FREQ))
+                elapsed_time = time.time() - beginning_time
+                print("[{}:{}:{:3f}s] training loss: {}, training accuracy: {}, training recall: {}".format(epoch, train_batch_num / (len(train_dataset)/BATCH_SIZE), elapsed_time, train_running_loss/OUTPUT_FREQ, train_running_accuracy/OUTPUT_FREQ, recall_score(y.cpu().detach().numpy(), predictions.cpu().detach().numpy())))
 
                 # 1. Log scalar values (scalar summary)
                 info = { 'train_loss': train_running_loss/OUTPUT_FREQ, 'train_accuracy': train_running_accuracy/OUTPUT_FREQ }
 
-                for tag, value in info.items():
-                    exp.metric(tag, value, log=False)
-                    logger.scalar_summary(tag, value, train_batch_num+1)
+                #for tag, value in info.items():
+                #    exp.metric(tag, value, log=False)
+                #    logger.scalar_summary(tag, value, train_batch_num+1)
 
-                # 2. Log values and gradients of the parameters (histogram summary)
-                for tag, value in model.named_parameters():
-                    tag = tag.replace('.', '/')
-                    logger.histo_summary(tag, value.data.cpu().numpy(), train_batch_num+1)
-                    logger.histo_summary(tag+'/grad', value.grad.data.cpu().numpy(), train_batch_num+1)
+                ## 2. Log values and gradients of the parameters (histogram summary)
+                #for tag, value in model.named_parameters():
+                #    tag = tag.replace('.', '/')
+                #    logger.histo_summary(tag, value.detach().cpu().numpy(), train_batch_num+1)
+                #    logger.histo_summary(tag+'/grad', value.grad.detach().cpu().numpy(), train_batch_num+1)
 
                 train_running_loss = 0.0
+                beginning_time = 0.0
                 train_running_accuracy = 0.0
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
         print("Running validation...")
+        model.eval()
         for val_batch_num, val_inputs in enumerate(val_dataloader):
             claims, evidences, labels = inputs  
 
@@ -162,13 +186,13 @@ def run():
             y = y.view(-1)
             y_pred = y_pred.view(-1)
 
-            bin_acc = F.sigmoid(y_pred).round()
-            accuracy = (y==bin_acc).float().mean()
+            predictions = F.sigmoid(y_pred).round()
+            accuracy = (y==predictions).float().mean()
             val_running_accuracy += accuracy.item()
             val_running_loss += loss.item()
 
             if (val_batch_num % OUTPUT_FREQ)==0 and val_batch_num>0:
-                print("[{}:{}] loss: {}, accuracy: {}".format(epoch, val_batch_num / (len(val_dataset)/BATCH_SIZE), val_running_loss/OUTPUT_FREQ, val_running_accuracy/OUTPUT_FREQ))
+                print("[{}:{}] loss: {}, accuracy: {}, recall: {}".format(epoch, val_batch_num / (len(val_dataset)/BATCH_SIZE), val_running_loss/OUTPUT_FREQ, val_running_accuracy/OUTPUT_FREQ, recall_score(y.detach().cpu().numpy(), predictions.detach().cpu().numpy())))
 
                 # 1. Log scalar values (scalar summary)
                 info = { 'val_loss': val_running_loss/OUTPUT_FREQ, 'val_accuracy': val_running_accuracy/OUTPUT_FREQ }
@@ -180,17 +204,18 @@ def run():
                 # 2. Log values and gradients of the parameters (histogram summary)
                 for tag, value in model.named_parameters():
                     tag = tag.replace('.', '/')
-                    logger.histo_summary(tag, value.data.cpu().numpy(), val_batch_num+1)
-                    logger.histo_summary(tag+'/grad', value.grad.data.cpu().numpy(), val_batch_num+1)
+                    logger.histo_summary(tag, value.detach().cpu().numpy(), val_batch_num+1)
+                    logger.histo_summary(tag+'/grad', value.grad.detach().cpu().numpy(), val_batch_num+1)
 
                 val_running_loss = 0.0
                 val_running_accuracy = 0.0
 
-    model_str = "models/saved_model" 
-    for key, value in parameters.items():
-        model_str += "_{}-{}".format(key.replace(" ", "_"), value)
-
-    torch.save(model.state_dict(), model_str)
+        train_acc = torch.tensor((mean_train_acc)/len(train_dataloader), dtype=torch.float)
+        print("[{}] mean accuracy: {}".format(epoch, train_acc))
+        best_accuracy = torch.tensor(max(train_acc.cpu().numpy(), best_accuracy.cpu().numpy()))
+        is_best = bool(train_acc >= best_accuracy)
+        
+        save_checkpoint({"epoch": epoch, "state_dict": model.state_dict(), "best_accuracy": best_accuracy}, is_best, filename=model_checkpoint_dir + "accuracy_{}".format(train_acc.cpu().numpy()))
 
 if __name__=="__main__":
     args = parse_args()
@@ -214,4 +239,4 @@ if __name__=="__main__":
         claims_dict = joblib.load("new_claims_dict.pkl")
 
     torch.multiprocessing.set_start_method("fork", force=True)
-    run()
+    run(args, train, sparse_evidences, claims_dict)

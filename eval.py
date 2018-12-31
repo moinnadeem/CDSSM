@@ -10,6 +10,7 @@
 
 import pickle
 from multiprocessing import cpu_count
+import os
 
 import joblib
 import nltk
@@ -26,6 +27,7 @@ from hyperdash import Experiment, monitor
 from scipy import sparse
 from sys import argv
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+from sklearn.metrics import classification_report, accuracy_score
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from tqdm import tqdm, tqdm_notebook
@@ -46,6 +48,7 @@ def parse_args():
     parser.add_argument("--epochs", type=int, help="Number of epochs to learn for.", default=3)
     parser.add_argument("--data", help="Training dataset to load file from.", default="shared_task_dev.pkl")
     parser.add_argument("--model", help="Model to evaluate.") 
+    parser.add_argument("--sparse-evidences", default=False, action="store_true")
     return parser.parse_args()
 
 @monitor("CLSM Test")
@@ -85,7 +88,8 @@ def run():
 
     true = []
     pred = []
-    print("Training...")
+    print("Evaluating...")
+    model.eval()
     test_running_accuracy = 0.0
     test_running_loss = 0.0
     num_batches = 0
@@ -94,9 +98,11 @@ def run():
         claims, evidences, labels = inputs  
 
         claims = claims.to(device) 
-        evidences = evidences.to(device) 
         claims = claims.cuda()
+
+        evidences = evidences.to(device) 
         evidences = evidences.cuda()
+
         labels = labels.to(device)
         labels = labels.cuda()
 
@@ -120,7 +126,7 @@ def run():
 
         
         if batch_num % OUTPUT_FREQ==0 and batch_num>0:
-            print("[{}]: {}".format(batch_num, test_running_accuracy / num_batches))
+            print("[{}]: {}".format(batch_num, test_running_accuracy / OUTPUT_FREQ))
 
             # 1. Log scalar values (scalar summary)
             info = { 'test_loss': test_running_loss/OUTPUT_FREQ, 'test_accuracy': test_running_accuracy/OUTPUT_FREQ }
@@ -137,7 +143,9 @@ def run():
             test_running_loss = 0.0
             test_running_accuracy = 0.0
 
-    print("Final accuracy: {}".format(test_running_accuracy / num_batches))
+    final_accuracy = accuracy_score(true, pred)
+    print("Final accuracy: {}".format(final_accuracy))
+    print(classification_report(true, pred))
     filename = "predicted_labels"
     for key, value in parameters.items():
         filename += "_{}-{}".format(key.replace(" ", "_"), value)
