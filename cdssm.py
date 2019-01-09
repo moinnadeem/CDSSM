@@ -36,25 +36,29 @@ class CDSSM(nn.Module):
         super(CDSSM, self).__init__()
         # layers for query
         self.query_conv = nn.Conv1d(WORD_DEPTH, K, FILTER_LENGTH)
+        self.second_query_conv = nn.Conv1d(K, K, FILTER_LENGTH)
         # adding Xavier-He initialization
         torch.nn.init.xavier_uniform_(self.query_conv.weight)
+        torch.nn.init.xavier_uniform_(self.second_query_conv.weight)
 
         # learn the semantic representation
         self.query_sem = nn.Linear(K, L)
         torch.nn.init.xavier_uniform_(self.query_sem.weight)
 
         # adding a hidden layer
-        #self.query_hidden = nn.Linear(L, L//2)
-        #self.document_hidden = nn.Linear(L, L//2)
+        self.query_hidden = nn.Linear(L, L//2)
+        self.document_hidden = nn.Linear(L, L//2)
 
         # dropout for regularization
-        print("Model with dropout!")
+        print("Model with dropout and tanh for hidden with deeper convolutions.")
         self.query_dropout = nn.Dropout(0.2)
         self.document_dropout = nn.Dropout(0.2)
 
         # layers for docs
         self.doc_conv = nn.Conv1d(WORD_DEPTH, K, FILTER_LENGTH)
+        self.second_doc_conv = nn.Conv1d(K, K, FILTER_LENGTH)
         torch.nn.init.xavier_uniform_(self.doc_conv.weight)
+        torch.nn.init.xavier_uniform_(self.second_doc_conv.weight)
         self.doc_sem = nn.Linear(K, L)
         torch.nn.init.xavier_uniform_(self.doc_sem.weight)
 
@@ -79,6 +83,7 @@ class CDSSM(nn.Module):
         # That is, h_Q = tanh(W_c • l_Q + b_c). Note: the paper does not include bias units.
         q_c = torch.tanh(self.query_conv(q))
         q_c = self.q_norm(q_c)
+        q_c = torch.tanh(self.second_query_conv(q_c))
 
         # Next, we apply a max-pooling layer to the convolved query matrix.
         q_k = kmax_pooling(q_c, 2, 1)
@@ -97,6 +102,8 @@ class CDSSM(nn.Module):
 
         pos_c = torch.tanh(self.doc_conv(pos))
         pos_c = self.doc_norm(pos_c)
+        pos_c = torch.tanh(self.second_doc_conv(pos_c))
+
         pos_k = kmax_pooling(pos_c, 2, 1)
         pos_k = pos_k.transpose(1,2)
         pos_k = self.document_dropout(pos_k)
@@ -109,8 +116,8 @@ class CDSSM(nn.Module):
         # dots[0] is the dot-product for positive document, this is necessary to remember
         # because we set the target label accordingly
 
-        #q_s = F.tanh(self.query_hidden(q_s))
-        #pos_s = F.tanh(self.document_hidden(pos_s))
+        q_s = F.tanh(self.query_hidden(q_s))
+        pos_s = F.tanh(self.document_hidden(pos_s))
         q_s = self.query_dropout(q_s)
         pos_s = self.document_dropout(pos_s)
         

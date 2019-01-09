@@ -21,13 +21,76 @@ def variable_collate(batch):
             labels.append(l)
     claims = stack_uneven(claims)
     evidences = stack_uneven(evidences)
-    labels = torch.Tensor(labels).long()
+    labels = torch.tensor(labels, dtype=torch.float)
 
-    claims= torch.from_numpy(claims).float()
-    evidences = torch.from_numpy(evidences).float()
+    claims = torch.from_numpy(claims)
+    evidences = torch.from_numpy(evidences)
 
     return [claims, evidences, labels]
     
+def pad_tensor(vec, pad, dim):
+    """
+    args:
+        vec - tensor to pad
+        pad - the size to pad to
+        dim - dimension to pad
+
+    return:
+        a new tensor padded to 'pad' in dimension 'dim'
+    """
+    pad_size = list(vec.shape)
+    pad_size[dim] = pad - vec.size(dim)
+    return torch.cat([vec, torch.cuda.FloatTensor(*pad_size)], dim=dim)
+
+class PadCollate:
+    """
+    a variant of callate_fn that pads according to the longest sequence in
+    a batch of sequences
+    """
+
+    def __init__(self, dim=0):
+        """
+        args:
+            dim - the dimension to be padded (dimension of time in sequences)
+        """
+        self.dim = dim
+
+    def pad_collate(self, batch):
+        """
+        args:
+            batch - list of (tensor, tensor, label)
+
+        reutrn:
+            xs - a tensor of all examples in 'batch' after padding
+            ys - a LongTensor of all labels in batch
+        """
+        claims = []
+        evidences = []
+        labels = []
+        for item in batch:
+            for c in item[0]:
+                claims.append(c)
+            for e in item[1]:
+                evidences.append(e)
+            for l in item[2]:
+                labels.append(l)
+        batched_items = []
+
+        for tensor in [claims, evidences]:
+            # find longest sequence
+            max_len = max(map(lambda x: x.shape[self.dim], tensor))
+
+            # pad according to max_len
+            batched_items.append(list(map(lambda x: pad_tensor(x, pad=max_len, dim=self.dim), tensor)))
+
+        # stack all
+        claims = torch.stack(batched_items[0], dim=0).cuda()
+        evidences = torch.stack(batched_items[1], dim=0).cuda()
+        labels = torch.FloatTensor(labels).cuda()
+        return claims, evidences, labels 
+
+    def __call__(self, batch):
+        return self.pad_collate(batch)
 
 class WikiDataset(Dataset):
     """
@@ -72,7 +135,8 @@ class WikiDataset(Dataset):
         #claim = self.encoder.tokenize_claim(claim)
         #claim = sparse.vstack(claim).toarray()  # turn it into a array
         claim = self.claims_dict[d['claim']]
-        claim = claim.toarray()
+        claim = claim.toarray().astype("float", copy=False)
+        claim = torch.from_numpy(claim).cuda().float()
         #claim = sparse.vstack(self.encoder.tokenize_claim(utils.preprocess_article_name(d['claim']))).toarray()
 
         evidences = []
@@ -93,14 +157,13 @@ class WikiDataset(Dataset):
                 evidence = sparse.vstack(evidence)
 
             evidence = evidence.toarray()
+            evidence = torch.from_numpy(evidence).cuda().float()
             evidences.append(evidence)
             claims.append(claim)
             labels.append(1)
 
         for j in range(num_positive_articles, self.data_batch_size):
             if self.randomize:
-                e = np.random.choice(d['evidence'])
-            else:
                 e = d['evidence'][j]
 
             processed = utils.preprocess_article_name(e.split("http://wikipedia.org/wiki/")[1])
@@ -115,13 +178,15 @@ class WikiDataset(Dataset):
                     else:
                         print(e)
                         raise Exception("You fucked up somewhere")
+
                 else: 
                     evidence = self.encoder.tokenize_claim(processed)
                     if len(evidence)>0:
                         evidence = sparse.vstack(evidence)
 
             if evidence.shape[0]>0:
-                evidence = evidence.toarray() 
+                evidence = evidence.toarray()
+                evidence = torch.from_numpy(evidence).cuda().float()
                 evidences.append(evidence)
                 claims.append(claim)
                 if processed in self.claim_to_article[d['claim']]:
@@ -161,7 +226,7 @@ def stack_uneven(arrays, fill_value=0.):
     max_sizes = np.max(list(zip(*sizes)), -1)
 
     # The resultant array has stacked on the first dimension
-    result = np.full((len(arrays),) + tuple(max_sizes), fill_value)
+    result = np.full((len(arrays),) + tuple(max_sizes), fill_value, dtype=np.float)
     for i, a in enumerate(arrays):
       # The shape of this array `a`, turned into slices
       slices = tuple(slice(0,s) for s in sizes[i])
