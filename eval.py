@@ -75,7 +75,7 @@ def run():
 
     print("Created dataset...")
     dataset = pytorch_data_loader.WikiDataset(test, claims_dict, data_batch_size=DATA_BATCH_SIZE, testFile="shared_task_dev.jsonl") 
-    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, num_workers=3, shuffle=True, collate_fn=pytorch_data_loader.variable_collate)
+    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, num_workers=3, shuffle=True, collate_fn=pytorch_data_loader.PadCollate())
 
     OUTPUT_FREQ = int((len(dataset)/BATCH_SIZE)*0.02) 
     criterion = torch.nn.BCEWithLogitsLoss()
@@ -97,15 +97,6 @@ def run():
         num_batches += 1
         claims, evidences, labels = inputs  
 
-        claims = claims.to(device) 
-        claims = claims.cuda()
-
-        evidences = evidences.to(device) 
-        evidences = evidences.cuda()
-
-        labels = labels.to(device)
-        labels = labels.cuda()
-
         y_pred = model(claims, evidences)
 
         y = (labels).float()
@@ -113,7 +104,7 @@ def run():
         y = y.squeeze()
         y = y.view(-1)
         y_pred = y_pred.view(-1)
-        bin_acc = F.sigmoid(y_pred).round()
+        bin_acc = torch.sigmoid(y_pred).round()
 
         loss = criterion(y_pred, y)
 
@@ -143,6 +134,9 @@ def run():
             test_running_loss = 0.0
             test_running_accuracy = 0.0
 
+    print(true[0], pred[0])
+    true = np.array(true).astype("int") 
+    pred = np.array(pred).astype("int") 
     final_accuracy = accuracy_score(true, pred)
     print("Final accuracy: {}".format(final_accuracy))
     print(classification_report(true, pred))
@@ -162,7 +156,7 @@ if __name__=="__main__":
         claims_dict
     except:
         print("Loading validation claims data...")
-        claims_dict = joblib.load("val_dict.pkl")
+        claims_dict = joblib.load("claims_dict.pkl")
 
-    torch.multiprocessing.set_start_method("fork", force=True)
+    torch.multiprocessing.set_start_method("spawn", force=True)
     run()
