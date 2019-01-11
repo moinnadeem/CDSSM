@@ -204,3 +204,27 @@ def parallel_process(array, function, n_jobs=12, use_kwargs=False, front_num=3):
         except Exception as e:
             out.append(e)
     return front + out
+
+def sparsify_evidences(train):
+    # encoder = ClaimEncoder()
+    evidence_set = []
+    for fact in train:
+        evidence_set.extend(fact['evidence'])
+    evidence_set = list(set(evidence_set))
+
+    result = joblib.Parallel(n_jobs=15, verbose=1)(joblib.delayed(process)(i) for i in evidence_set)
+    # result = parallel_process(evidence_set, process, n_jobs=15)
+    evidences = {}
+    for e in result:
+        k, v = e
+        evidences[k] = v
+    return evidences
+
+def process(evidence):
+    processed = preprocess_article_name(evidence.split("http://wikipedia.org/wiki/")[1])
+    evidence = encoder.tokenize_claim(processed)
+    if len(evidence)>0:
+        evidence = sparse.vstack(evidence)
+        return processed, evidence
+    return None
+
