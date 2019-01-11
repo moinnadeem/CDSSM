@@ -124,12 +124,12 @@ def run():
 
             for tag, value in info.items():
                 exp.metric(tag, value, log=False)
-                logger.scalar_summary(tag, value, batch_num+1)
+                # logger.scalar_summary(tag, value, batch_num+1)
 
             # 2. Log values and gradients of the parameters (histogram summary)
             for tag, value in model.named_parameters():
                 tag = tag.replace('.', '/')
-                logger.histo_summary(tag, value.data.cpu().numpy(), batch_num+1)
+                # logger.histo_summary(tag, value.data.cpu().numpy(), batch_num+1)
 
             test_running_loss = 0.0
             test_running_accuracy = 0.0
