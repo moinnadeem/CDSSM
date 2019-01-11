@@ -48,7 +48,8 @@ def parse_args():
     parser.add_argument("--data-batch-size", type=int, help="Number of examples per query.", default=8)
     parser.add_argument("--learning-rate", type=float, help="Learning rate for model.", default=1e-3)
     parser.add_argument("--epochs", type=int, help="Number of epochs to learn for.", default=3)
-    parser.add_argument("--data", help="Training dataset to load file from.", default="shared_task_dev.pkl")
+    parser.add_argument("--randomize", default=False, action="store_true")
+    parser.add_argument("--data", help="Training dataset to load file from.", default="data/validation")
     parser.add_argument("--model", help="Model to evaluate.") 
     parser.add_argument("--sparse-evidences", default=False, action="store_true")
     return parser.parse_args()
@@ -60,6 +61,7 @@ def run():
     DATA_BATCH_SIZE = args.data_batch_size
     NUM_EPOCHS = args.epochs
     MODEL = args.model
+    RANDOMIZE = args.randomize
 
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -76,7 +78,7 @@ def run():
     model.load_state_dict(torch.load(MODEL))
 
     print("Created dataset...")
-    dataset = pytorch_data_loader.WikiDataset(test, claims_dict, data_batch_size=DATA_BATCH_SIZE, testFile="shared_task_dev.jsonl") 
+    dataset = pytorch_data_loader.WikiDataset(test, claims_dict, data_batch_size=DATA_BATCH_SIZE, testFile="shared_task_dev.jsonl", sparse_evidences=sparse_evidences, randomize=RANDOMIZE) 
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, num_workers=0, shuffle=True, collate_fn=pytorch_data_loader.PadCollate())
 
     OUTPUT_FREQ = int((len(dataset)/BATCH_SIZE)*0.02) 
@@ -89,17 +91,19 @@ def run():
 
     true = []
     pred = []
-    print("Evaluating...")
     model.eval()
     test_running_accuracy = 0.0
     test_running_recall_at_ten = 0.0
 
-    recall_intervals = [1,2,5,10,40,100,200,400]
+    recall_intervals = [1,2,5,10,20,40,60,80,100,200,400]
     recall = {}
     for i in recall_intervals:
         recall[i] = []
 
     num_batches = 0
+
+    print("Evaluating...")
+    beginning_time = time.time() 
 
     for batch_num, inputs in enumerate(dataloader):
         num_batches += 1
@@ -145,11 +149,9 @@ def run():
             retrieved_evidences.append(evidences_text[idx])
 
         for k in recall_intervals:
-            # recall[k].append(calculate_recall(retrieved_evidences, relevant_evidences, k=k))
-            recall[k].append(0)
+            recall[k].append(calculate_recall(retrieved_evidences, relevant_evidences, k=k))
 
-        # test_running_recall_at_ten += calculate_recall(retrieved_evidences, relevant_evidences, k=20)
-        test_running_recall_at_ten += 0.0
+        test_running_recall_at_ten += calculate_recall(retrieved_evidences, relevant_evidences, k=20)
 
         y = y.round()
         bin_acc = bin_acc.round()
@@ -161,7 +163,8 @@ def run():
         test_running_accuracy += accuracy.item()
 
         if batch_num % OUTPUT_FREQ==0 and batch_num>0:
-            print("[{}]: accuracy: {}, recall@20: {}".format(batch_num, test_running_accuracy / OUTPUT_FREQ, test_running_recall_at_ten / OUTPUT_FREQ))
+            elapsed_time = time.time() - beginning_time
+            print("[{}:{:3f}s]: accuracy: {}, recall@20: {}".format(batch_num, elapsed_time, test_running_accuracy / OUTPUT_FREQ, test_running_recall_at_ten / OUTPUT_FREQ))
 
             # 1. Log scalar values (scalar summary)
             info = { 'test_accuracy': test_running_accuracy/OUTPUT_FREQ }
@@ -177,13 +180,16 @@ def run():
 
             test_running_accuracy = 0.0
             test_running_recall_at_ten = 0.0
+            beginning_time = time.time()
 
-        # del claims_tensors
-        # del claims_text
-        # del evidences_tensors
-        # del evidences_text
-        # del labels 
-        # torch.cuda.empty_cache()
+        del claims_tensors
+        del claims_text
+        del evidences_tensors
+        del evidences_text
+        del labels 
+        del y
+        del y_pred
+        torch.cuda.empty_cache()
 
     final_accuracy = accuracy_score(true, pred)
     print("Final accuracy: {}".format(final_accuracy))
@@ -224,7 +230,16 @@ if __name__=="__main__":
     args = parse_args()
 
     print("Loading {}".format(args.data))
-    test = joblib.load(args.data)
+    
+    fname = os.path.join(args.data,"train.pkl")
+    test = joblib.load(fname)
+
+    if args.sparse_evidences:
+        print("Loading sparse evidences...")
+        fname = os.path.join(args.data, "evidence.pkl")
+        sparse_evidences = joblib.load(fname)
+    else:
+        sparse_evidences = None
 
     try:
         claims_dict
