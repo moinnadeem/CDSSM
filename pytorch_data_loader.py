@@ -62,7 +62,12 @@ def pad_tensor(vec, pad, dim):
     """
     pad_size = list(vec.shape)
     pad_size[dim] = pad - vec.size(dim)
-    return torch.cat([vec, torch.cuda.FloatTensor(*pad_size)], dim=dim)
+    if vec.is_cuda:
+        zeros_tensor = torch.cuda.FloatTensor(*pad_size)
+    else:
+        zeros_tensor = torch.FloatTensor(*pad_size)
+
+    return torch.cat([vec, zeros_tensor], dim=dim)
 
 class PadCollate:
     """
@@ -136,7 +141,7 @@ class WikiDataset(Dataset):
             self.evidence_to_sparse = sparse_evidences 
         else:
             self.evidence_to_sparse = None
-        use_cuda = True
+        use_cuda = False 
         self.device = torch.device("cuda" if use_cuda else "cpu")
         self.data_batch_size = data_batch_size
         self.encoder = utils.ClaimEncoder()
@@ -160,7 +165,7 @@ class WikiDataset(Dataset):
         #claim = sparse.vstack(claim).toarray()  # turn it into a array
         claim = self.claims_dict[d['claim']]
         claim = claim.toarray()
-        claim = torch.Tensor(claim).cuda()
+        claim = torch.Tensor(claim).to(self.device)
         claim_text = d['claim']
         #claim = sparse.vstack(self.encoder.tokenize_claim(utils.preprocess_article_name(d['claim']))).toarray()
 
@@ -178,14 +183,14 @@ class WikiDataset(Dataset):
                 if processed in self.evidence_to_sparse: 
                     evidence = self.evidence_to_sparse[processed]
                 else:
-                    print("Skipping idx, keyerror")
+                    print("Claim: {}, evidence {} is missing!".format(d['claim'], processed)) 
                     return self.get_item(index+1)
             else:
                 evidence = self.encoder.tokenize_claim(processed)
                 evidence = sparse.vstack(evidence)
 
             evidence = evidence.toarray()
-            evidence = torch.Tensor(evidence).cuda()
+            evidence = torch.Tensor(evidence).to(self.device)
 
             evidence_text.append(processed)
             evidence_tensors.append(evidence)
@@ -196,8 +201,10 @@ class WikiDataset(Dataset):
             labels.append(1.0)
 
         for j in range(num_positive_articles, self.data_batch_size):
-            if self.randomize:
+            if not self.randomize:
                 e = d['evidence'][j]
+            else:
+                e = np.random.choice(d['evidence'])
 
             processed = utils.preprocess_article_name(e.split("http://wikipedia.org/wiki/")[1])
             #evidence = articles_dict[processed]
@@ -219,7 +226,7 @@ class WikiDataset(Dataset):
 
             if evidence.shape[0]>0:
                 evidence = evidence.toarray()
-                evidence = torch.Tensor(evidence).cuda()
+                evidence = torch.Tensor(evidence).to(self.device)
                 evidence_tensors.append(evidence)
                 evidence_text.append(processed)
 
