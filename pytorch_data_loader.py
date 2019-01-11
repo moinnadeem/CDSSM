@@ -9,24 +9,46 @@ import utils
 #torch.multiprocessing.set_start_method("spawn")
 
 def variable_collate(batch):
-    claims = []
-    evidences = []
+    #claims = []
+    #evidences = []
+    #labels = []
+    #for item in batch:
+    #    for c in item[0]:
+    #        claims.append(c)
+    #    for e in item[1]:
+    #        evidences.append(e)
+    #    for l in item[2]:
+    #        labels.append(l)
+
+    claims_tensors = []
+    claims_text = []
+    evidences_tensors = []
+    evidences_text = []
     labels = []
     for item in batch:
         for c in item[0]:
-            claims.append(c)
-        for e in item[1]:
-            evidences.append(e)
-        for l in item[2]:
-            labels.append(l)
-    claims = stack_uneven(claims)
-    evidences = stack_uneven(evidences)
-    labels = torch.tensor(labels, dtype=torch.float)
+            claims_tensors.append(c)
 
-    claims = torch.from_numpy(claims)
-    evidences = torch.from_numpy(evidences)
+        for c in item[1]:
+            claims_text.append(c)
 
-    return [claims, evidences, labels]
+        for c in item[2]:
+            evidences_tensors.append(c)
+
+        for c in item[3]:
+            evidences_text.append(c)
+
+        for c in item[4]:
+            labels.append(c)
+
+    claims_tensors = stack_uneven(claims_tensors)
+    evidences_tensors = stack_uneven(evidences_tensors)
+    labels = torch.FloatTensor(labels).cuda()
+
+    claims_tensors = torch.from_numpy(claims_tensors).float().cuda()
+    evidences_tensors = torch.from_numpy(evidences_tensors).float().cuda()
+
+    return [claims_tensors, claims_text, evidences_tensors, evidences_text, labels]
     
 def pad_tensor(vec, pad, dim):
     """
@@ -58,25 +80,27 @@ class PadCollate:
     def pad_collate(self, batch):
         """
         args:
-            batch - list of (tensor, tensor, label)
+            batch - list of (claim (tensor), claim (text), evidence (tensor), evidence (text), label)
 
         reutrn:
             xs - a tensor of all examples in 'batch' after padding
             ys - a LongTensor of all labels in batch
         """
-        claims = []
-        evidences = []
+        claims_tensors = []
+        claims_text = []
+        evidences_tensors = []
+        evidences_text = []
         labels = []
         for item in batch:
-            for c in item[0]:
-                claims.append(c)
-            for e in item[1]:
-                evidences.append(e)
-            for l in item[2]:
-                labels.append(l)
+            claims_tensors.extend(item[0])
+            claims_text.extend(item[1])
+            evidences_tensors.extend(item[2])
+            evidences_text.extend(item[3])
+            labels.extend(item[4])
+
         batched_items = []
 
-        for tensor in [claims, evidences]:
+        for tensor in [claims_tensors, evidences_tensors]:
             # find longest sequence
             max_len = max(map(lambda x: x.shape[self.dim], tensor))
 
@@ -84,10 +108,10 @@ class PadCollate:
             batched_items.append(list(map(lambda x: pad_tensor(x, pad=max_len, dim=self.dim), tensor)))
 
         # stack all
-        claims = torch.stack(batched_items[0], dim=0).cuda()
-        evidences = torch.stack(batched_items[1], dim=0).cuda()
-        labels = torch.FloatTensor(labels).cuda()
-        return claims, evidences, labels 
+        claims_tensors = torch.stack(batched_items[0], dim=0).cuda()
+        evidences_tensors = torch.stack(batched_items[1], dim=0).cuda()
+        labels = torch.tensor(labels, dtype=torch.float).cuda()
+        return [claims_tensors, claims_text, evidences_tensors, evidences_text, labels] 
 
     def __call__(self, batch):
         return self.pad_collate(batch)
@@ -113,7 +137,7 @@ class WikiDataset(Dataset):
         else:
             self.evidence_to_sparse = None
         use_cuda = True
-        self.device = torch.device("cuda:0" if use_cuda else "cpu")
+        self.device = torch.device("cuda" if use_cuda else "cpu")
         self.data_batch_size = data_batch_size
         self.encoder = utils.ClaimEncoder()
         self.claims_dict = claims_dict
@@ -135,13 +159,17 @@ class WikiDataset(Dataset):
         #claim = self.encoder.tokenize_claim(claim)
         #claim = sparse.vstack(claim).toarray()  # turn it into a array
         claim = self.claims_dict[d['claim']]
-        claim = claim.toarray().astype("float", copy=False)
-        claim = torch.from_numpy(claim).cuda().float()
+        claim = claim.toarray()
+        claim = torch.Tensor(claim).cuda()
+        claim_text = d['claim']
         #claim = sparse.vstack(self.encoder.tokenize_claim(utils.preprocess_article_name(d['claim']))).toarray()
 
-        evidences = []
+        claims_tensors = []
+        claims_text = []
+        evidence_tensors = []
+        evidence_text = []
         labels = []
-        claims = []
+
         num_positive_articles = min(len(self.claim_to_article[d['claim']]), 4)  # get all positive articles 
         for idx in range(num_positive_articles):
             processed = self.claim_to_article[d['claim']][idx]
@@ -157,10 +185,15 @@ class WikiDataset(Dataset):
                 evidence = sparse.vstack(evidence)
 
             evidence = evidence.toarray()
-            evidence = torch.from_numpy(evidence).cuda().float()
-            evidences.append(evidence)
-            claims.append(claim)
-            labels.append(1)
+            evidence = torch.Tensor(evidence).cuda()
+
+            evidence_text.append(processed)
+            evidence_tensors.append(evidence)
+
+            claims_text.append(claim_text) 
+            claims_tensors.append(claim)
+            #print("{}, Evidence: {}, label: {}".format(claim_text, processed, 1.0))
+            labels.append(1.0)
 
         for j in range(num_positive_articles, self.data_batch_size):
             if self.randomize:
@@ -186,22 +219,29 @@ class WikiDataset(Dataset):
 
             if evidence.shape[0]>0:
                 evidence = evidence.toarray()
-                evidence = torch.from_numpy(evidence).cuda().float()
-                evidences.append(evidence)
-                claims.append(claim)
+                evidence = torch.Tensor(evidence).cuda()
+                evidence_tensors.append(evidence)
+                evidence_text.append(processed)
+
+                claims_text.append(claim_text)
+                claims_tensors.append(claim)
+
                 if processed in self.claim_to_article[d['claim']]:
-                    labels.append(1)
+                    labels.append(1.0)
                 else:
-                    labels.append(0)
+                    labels.append(0.0)
+            else:
+                print(d['claim'], e)
+                raise Exception("SKipping append")
 
         #claim = claim.expand(evidences.shape[0], claim.shape[0], claim.shape[1])
-        return claims, evidences, labels 
+        return claims_tensors, claims_text, evidence_tensors, evidence_text, labels 
 
     def on_epoch_end(self):
         #np.random.shuffle(self.indicies)
         pass
 
-def to_torch_sparse_tensor(M, device="cuda:0"):
+def to_torch_sparse_tensor(M, device="cuda"):
     M = M.tocoo().astype(np.float32)
     indices = torch.from_numpy(np.vstack((M.row, M.col))).cuda().long()
     values = torch.from_numpy(M.data).cuda()

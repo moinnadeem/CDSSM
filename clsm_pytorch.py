@@ -14,6 +14,8 @@ import pickle
 import time
 from multiprocessing import cpu_count
 from sys import argv
+from parallel import DataParallelModel, DataParallelCriterion
+import parallel
 
 import joblib
 import pytorch_utils as putils
@@ -68,7 +70,7 @@ def run(args, train, sparse_evidences, claims_dict):
     model = model.to(device)
     if torch.cuda.device_count() > 0:
       print("Let's use", torch.cuda.device_count(), "GPU(s)!")
-      model = nn.DataParallel(model)
+      model = DataParallelModel(model)
     print("Created model with {:,} parameters.".format(putils.count_parameters(model)))
 
     if MODEL:
@@ -84,6 +86,9 @@ def run(args, train, sparse_evidences, claims_dict):
 
     # Loss and optimizer
     criterion = torch.nn.BCEWithLogitsLoss()
+    if torch.cuda.device_count() > 0:
+        print("Let's parallelize the backward pass...")
+        criterion = DataParallelCriterion(criterion)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
 
     OUTPUT_FREQ = max(int((len(train_dataset)/BATCH_SIZE)*0.02), 20) 
@@ -112,21 +117,25 @@ def run(args, train, sparse_evidences, claims_dict):
         model.train()
 
         for train_batch_num, inputs in enumerate(train_dataloader):
-            claims, evidences, labels = inputs  
+            claims_tensors, claims_text, evidences_tensors, evidences_text, labels = inputs  
 
             #claims = claims.to(device).float()
             #evidences = evidences.to(device).float()
             #labels = labels.to(device)
 
-            y_pred = model(claims, evidences)
+            y_pred = model(claims_tensors, evidences_tensors)
+            y = (labels).float()
+            y = y.unsqueeze(0)
+            y = y.unsqueeze(0)
+            print(y_pred[0].shape, y.shape)
+            loss = criterion(y_pred, y)
+            y_pred = parallel.gather(y_pred, 0)
 
-            y = (labels)
             y_pred = y_pred.squeeze()
             y = y.squeeze()
             y = y.view(-1)
             y_pred = y_pred.view(-1)
 
-            loss = criterion(y_pred, y)
 
             predictions = torch.sigmoid(y_pred).round()
             accuracy = (y==predictions).cuda().float()

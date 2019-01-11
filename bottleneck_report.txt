@@ -1,0 +1,541 @@
+`bottleneck` is a tool that can be used as an initial step for debugging
+bottlenecks in your program.
+
+It summarizes runs of your script with the Python profiler and PyTorch's
+autograd profiler. Because your script will be profiled, please ensure that it
+exits in a finite amount of time.
+
+For more complicated uses of the profilers, please see
+https://docs.python.org/3/library/profile.html and
+http://pytorch.org/docs/master/autograd.html#profiler for more information.
+Running environment analysis...
+Running your script with cProfile
+Loading data/small
+Loading claims data...
+Model with dropout!
+Let's use 1 GPU(s)!
+Created model with 52,718,058 parameters.
+Created dataset...
+Num Distinct Claims 109810
+Num Data Points 125050
+Num Distinct Claims 109810
+Num Data Points 125050
+{ data batch size: 8 }
+{ learning rate: 0.001 }
+{ sparse_evidences: False }
+{ loss: BCEWithLogitsLoss }
+{ data: data/small }
+{ training size: 800 }
+{ batch size: 1 }
+{ epochs: 2 }
+{ optimizer: Adam }
+Training...
+[0:0.02:5.938811s] training loss: 1.6231301203370094, training accuracy: 0.6328125, training recall: 0.0
+[0:0.04:3.072096s] training loss: 1.173102017492056, training accuracy: 0.65625, training recall: 0.0
+[0:0.06:1.630766s] training loss: 1.0724168377928436, training accuracy: 0.734375, training recall: 0.0
+[0:0.08:1.619488s] training loss: 0.8814745219424367, training accuracy: 0.765625, training recall: 0.0
+[0:0.1:2.572515s] training loss: 0.8730866834521294, training accuracy: 0.71875, training recall: 1.0
+[0:0.12:1.546245s] training loss: 0.9108042484149337, training accuracy: 0.7578125, training recall: 1.0
+[0:0.14:2.433965s] training loss: 0.7182806897908449, training accuracy: 0.765625, training recall: 0.5
+[0:0.16:2.023946s] training loss: 0.8657938931137323, training accuracy: 0.7265625, training recall: 0.0
+[0:0.18:2.127755s] training loss: 0.6886722575873137, training accuracy: 0.75, training recall: 0.5
+[0:0.2:1.770661s] training loss: 0.8139848560094833, training accuracy: 0.671875, training recall: 1.0
+[0:0.22:1.972374s] training loss: 0.7275752890855074, training accuracy: 0.7421875, training recall: 0.0
+[0:0.24:1.544883s] training loss: 0.6973544601351023, training accuracy: 0.7421875, training recall: 0.0
+[0:0.26:1.557599s] training loss: 0.7982896994799376, training accuracy: 0.75, training recall: 0.0
+[0:0.28:1.623917s] training loss: 0.8108441215008497, training accuracy: 0.734375, training recall: 0.0
+[0:0.3:1.528511s] training loss: 0.6856408761814237, training accuracy: 0.7421875, training recall: 0.0
+[0:0.32:1.663925s] training loss: 0.6733939610421658, training accuracy: 0.734375, training recall: 0.0
+[0:0.34:1.679641s] training loss: 0.6175812222063541, training accuracy: 0.75, training recall: 0.0
+[0:0.36:1.551957s] training loss: 0.677701226901263, training accuracy: 0.765625, training recall: 0.0
+[0:0.38:1.995453s] training loss: 0.9662745241075754, training accuracy: 0.6640625, training recall: 0.0
+[0:0.4:1.985363s] training loss: 0.6214914629235864, training accuracy: 0.8046875, training recall: 0.0
+[0:0.42:1.520813s] training loss: 0.6950810309499502, training accuracy: 0.671875, training recall: 0.0
+[0:0.44:1.949299s] training loss: 0.6697106561623514, training accuracy: 0.7734375, training recall: 0.0
+[0:0.46:1.664331s] training loss: 0.3882807632908225, training accuracy: 0.8203125, training recall: 0.0
+[0:0.48:1.954806s] training loss: 0.6438488196581602, training accuracy: 0.7109375, training recall: 0.0
+[0:0.5:1.760818s] training loss: 0.5919922515749931, training accuracy: 0.765625, training recall: 0.0
+[0:0.52:2.032238s] training loss: 0.591521198861301, training accuracy: 0.7265625, training recall: 1.0
+[0:0.54:1.474513s] training loss: 0.5391217917203903, training accuracy: 0.765625, training recall: 0.0
+[0:0.56:2.076071s] training loss: 0.48922090930864215, training accuracy: 0.8203125, training recall: 0.0
+[0:0.58:1.569901s] training loss: 0.5226884409785271, training accuracy: 0.78125, training recall: 0.0
+[0:0.6:1.597813s] training loss: 0.4956216402351856, training accuracy: 0.78125, training recall: 0.0
+[0:0.62:1.533095s] training loss: 0.3604180235415697, training accuracy: 0.875, training recall: 0.0
+[0:0.64:1.539096s] training loss: 0.5077857468277216, training accuracy: 0.8046875, training recall: 0.0
+[0:0.66:1.955079s] training loss: 0.3785831592977047, training accuracy: 0.8359375, training recall: 0.0
+[0:0.68:1.763357s] training loss: 0.5321468664333224, training accuracy: 0.78125, training recall: 1.0
+[0:0.7:2.380956s] training loss: 0.513964687474072, training accuracy: 0.78125, training recall: 0.0
+[0:0.72:1.558665s] training loss: 0.5321238022297621, training accuracy: 0.7578125, training recall: 0.0
+[0:0.74:1.645185s] training loss: 0.40713804215192795, training accuracy: 0.84375, training recall: 0.0
+[0:0.76:1.609209s] training loss: 0.5064878184348345, training accuracy: 0.7578125, training recall: 0.5
+[0:0.78:1.614270s] training loss: 0.5730411037802696, training accuracy: 0.734375, training recall: 1.0
+[0:0.8:1.554457s] training loss: 0.4606784489005804, training accuracy: 0.8125, training recall: 0.0
+[0:0.82:1.744104s] training loss: 0.49953755736351013, training accuracy: 0.8125, training recall: 1.0
+[0:0.84:1.934018s] training loss: 0.44786042999476194, training accuracy: 0.828125, training recall: 0.0
+[0:0.86:1.588950s] training loss: 0.49147121235728264, training accuracy: 0.84375, training recall: 0.0
+[0:0.88:1.382795s] training loss: 0.5213993526995182, training accuracy: 0.8046875, training recall: 1.0
+[0:0.9:1.779955s] training loss: 0.48210098035633564, training accuracy: 0.796875, training recall: 0.0
+[0:0.92:2.039976s] training loss: 0.4085076916962862, training accuracy: 0.8359375, training recall: 0.0
+[0:0.94:1.714996s] training loss: 0.4213288389146328, training accuracy: 0.859375, training recall: 0.0
+[0:0.96:1.953922s] training loss: 0.40388556849211454, training accuracy: 0.828125, training recall: 0.0
+[0:0.98:1.892761s] training loss: 0.5295257912948728, training accuracy: 0.7421875, training recall: 1.0
+Running validation...
+[0:0.08] loss: 0.3757116477936506, accuracy: 0.796875, recall: 0.0
+[0:0.16] loss: 0.35361096262931824, accuracy: 0.75, recall: 0.0
+[0:0.24] loss: 0.35361096262931824, accuracy: 0.75, recall: 0.0
+[0:0.32] loss: 0.35361096262931824, accuracy: 0.75, recall: 0.0
+[0:0.4] loss: 0.35361096262931824, accuracy: 0.75, recall: 0.0
+[0:0.48] loss: 0.35361096262931824, accuracy: 0.75, recall: 0.0
+[0:0.56] loss: 0.35361096262931824, accuracy: 0.75, recall: 0.0
+[0:0.64] loss: 0.35361096262931824, accuracy: 0.75, recall: 0.0
+[0:0.72] loss: 0.35361096262931824, accuracy: 0.75, recall: 0.0
+[0:0.8] loss: 0.35361096262931824, accuracy: 0.75, recall: 0.0
+[0:0.88] loss: 0.35361096262931824, accuracy: 0.75, recall: 0.0
+[0:0.96] loss: 0.35361096262931824, accuracy: 0.75, recall: 0.0
+[0] mean accuracy: 0.7673437595367432
+=> Saving a new best
+[1:0.02:1.428112s] training loss: 0.41139044146984816, training accuracy: 0.8828125, training recall: 0.0
+[1:0.04:1.676709s] training loss: 0.29435402527451515, training accuracy: 0.90625, training recall: 1.0
+[1:0.06:1.404665s] training loss: 0.3301327209919691, training accuracy: 0.8515625, training recall: 1.0
+[1:0.08:1.655425s] training loss: 0.32872068602591753, training accuracy: 0.828125, training recall: 1.0
+[1:0.1:1.484476s] training loss: 0.34361122408881783, training accuracy: 0.8515625, training recall: 0.0
+[1:0.12:1.604260s] training loss: 0.3051380505785346, training accuracy: 0.875, training recall: 0.0
+[1:0.14:1.668015s] training loss: 0.29105651658028364, training accuracy: 0.90625, training recall: 0.0
+[1:0.16:1.688648s] training loss: 0.30453469092026353, training accuracy: 0.859375, training recall: 0.5
+[1:0.18:1.707480s] training loss: 0.32341317366808653, training accuracy: 0.84375, training recall: 0.0
+[1:0.2:1.917086s] training loss: 0.2840189782436937, training accuracy: 0.890625, training recall: 1.0
+[1:0.22:1.494102s] training loss: 0.29725144943222404, training accuracy: 0.84375, training recall: 1.0
+[1:0.24:1.830562s] training loss: 0.3006244730204344, training accuracy: 0.8515625, training recall: 1.0
+[1:0.26:1.501615s] training loss: 0.35047851875424385, training accuracy: 0.8203125, training recall: 0.5
+[1:0.28:1.543516s] training loss: 0.2789093595929444, training accuracy: 0.8671875, training recall: 0.0
+[1:0.3:1.580467s] training loss: 0.3859000587835908, training accuracy: 0.8125, training recall: 0.5
+[1:0.32:1.645936s] training loss: 0.2816508440300822, training accuracy: 0.8828125, training recall: 0.6666666666666666
+[1:0.34:1.714527s] training loss: 0.44030346907675266, training accuracy: 0.8359375, training recall: 0.0
+[1:0.36:1.561506s] training loss: 0.3346678940579295, training accuracy: 0.828125, training recall: 0.0
+[1:0.38:1.956036s] training loss: 0.32298314524814487, training accuracy: 0.8671875, training recall: 0.5
+[1:0.4:1.487243s] training loss: 0.3204456907697022, training accuracy: 0.8359375, training recall: 1.0
+[1:0.42:1.728977s] training loss: 0.38406798988580704, training accuracy: 0.859375, training recall: 0.0
+[1:0.44:1.756821s] training loss: 0.4047816935926676, training accuracy: 0.8203125, training recall: 0.0
+[1:0.46:1.702447s] training loss: 0.3510834714397788, training accuracy: 0.8359375, training recall: 0.0
+[1:0.48:1.524238s] training loss: 0.28994843037799, training accuracy: 0.8671875, training recall: 0.0
+[1:0.5:1.904696s] training loss: 0.32238247571513057, training accuracy: 0.8359375, training recall: 0.0
+[1:0.52:1.970845s] training loss: 0.25225039990618825, training accuracy: 0.90625, training recall: 1.0
+[1:0.54:2.024879s] training loss: 0.2784987366758287, training accuracy: 0.90625, training recall: 1.0
+[1:0.56:1.723089s] training loss: 0.280810568947345, training accuracy: 0.8515625, training recall: 1.0
+[1:0.58:1.675601s] training loss: 0.2675364534370601, training accuracy: 0.890625, training recall: 0.0
+[1:0.6:1.684033s] training loss: 0.38728542253375053, training accuracy: 0.828125, training recall: 1.0
+[1:0.62:1.724566s] training loss: 0.30334153212606907, training accuracy: 0.8515625, training recall: 0.0
+[1:0.64:1.649828s] training loss: 0.3324657608754933, training accuracy: 0.84375, training recall: 1.0
+[1:0.66:1.469348s] training loss: 0.29412295552901924, training accuracy: 0.8515625, training recall: 0.0
+[1:0.68:1.736430s] training loss: 0.4308490986004472, training accuracy: 0.828125, training recall: 1.0
+[1:0.7:1.969918s] training loss: 0.3570764111354947, training accuracy: 0.8515625, training recall: 0.0
+[1:0.72:1.810704s] training loss: 0.26767566287890077, training accuracy: 0.875, training recall: 0.0
+[1:0.74:1.704670s] training loss: 0.31728578032925725, training accuracy: 0.890625, training recall: 0.0
+[1:0.76:1.501172s] training loss: 0.39553365763276815, training accuracy: 0.8203125, training recall: 1.0
+[1:0.78:1.673308s] training loss: 0.4254737263545394, training accuracy: 0.8203125, training recall: 0.0
+[1:0.8:1.600159s] training loss: 0.3124087289907038, training accuracy: 0.8671875, training recall: 0.0
+[1:0.82:1.686096s] training loss: 0.31985856825485826, training accuracy: 0.90625, training recall: 0.0
+[1:0.84:1.949868s] training loss: 0.4439758360385895, training accuracy: 0.796875, training recall: 0.5
+[1:0.86:1.675226s] training loss: 0.42600266449153423, training accuracy: 0.8359375, training recall: 0.0
+[1:0.88:1.866580s] training loss: 0.3461808133870363, training accuracy: 0.859375, training recall: 0.0
+[1:0.9:1.792333s] training loss: 0.3492407794110477, training accuracy: 0.84375, training recall: 0.0
+[1:0.92:1.685290s] training loss: 0.31043270137161016, training accuracy: 0.8828125, training recall: 0.5
+[1:0.94:1.847972s] training loss: 0.38359946804121137, training accuracy: 0.828125, training recall: 0.0
+[1:0.96:1.725602s] training loss: 0.3038687692023814, training accuracy: 0.8828125, training recall: 0.5
+[1:0.98:1.927349s] training loss: 0.34647979494184256, training accuracy: 0.8203125, training recall: 0.75
+Running validation...
+[1:0.08] loss: 0.18983029294759035, accuracy: 1.0625, recall: 1.0
+[1:0.16] loss: 0.17866380512714386, accuracy: 1.0, recall: 1.0
+[1:0.24] loss: 0.17866380512714386, accuracy: 1.0, recall: 1.0
+[1:0.32] loss: 0.17866380512714386, accuracy: 1.0, recall: 1.0
+[1:0.4] loss: 0.17866380512714386, accuracy: 1.0, recall: 1.0
+[1:0.48] loss: 0.17866380512714386, accuracy: 1.0, recall: 1.0
+[1:0.56] loss: 0.17866380512714386, accuracy: 1.0, recall: 1.0
+[1:0.64] loss: 0.17866380512714386, accuracy: 1.0, recall: 1.0
+[1:0.72] loss: 0.17866380512714386, accuracy: 1.0, recall: 1.0
+[1:0.8] loss: 0.17866380512714386, accuracy: 1.0, recall: 1.0
+[1:0.88] loss: 0.17866380512714386, accuracy: 1.0, recall: 1.0
+[1:0.96] loss: 0.17866380512714386, accuracy: 1.0, recall: 1.0
+[1] mean accuracy: 0.8550000190734863
+=> Saving a new best
+Running your script with the autograd profiler...
+Loading data/small
+Model with dropout!
+Let's use 1 GPU(s)!
+Created model with 52,718,058 parameters.
+Created dataset...
+Num Distinct Claims 109810
+Num Data Points 125050
+Num Distinct Claims 109810
+Num Data Points 125050
+{ data batch size: 8 }
+{ learning rate: 0.001 }
+{ sparse_evidences: False }
+{ loss: BCEWithLogitsLoss }
+{ data: data/small }
+{ training size: 800 }
+{ batch size: 1 }
+{ epochs: 2 }
+{ optimizer: Adam }
+Training...
+[0:0.02:1.799549s] training loss: 2.770301204174757, training accuracy: 0.7109375, training recall: 0.0
+[0:0.04:1.593595s] training loss: 1.7505038101226091, training accuracy: 0.7734375, training recall: 0.0
+[0:0.06:1.873918s] training loss: 1.6763805729569867, training accuracy: 0.71875, training recall: 0.0
+[0:0.08:1.903438s] training loss: 1.567927349358797, training accuracy: 0.7734375, training recall: 0.0
+[0:0.1:1.637169s] training loss: 1.625314665492624, training accuracy: 0.75, training recall: 0.0
+[0:0.12:1.571422s] training loss: 2.296710217371583, training accuracy: 0.625, training recall: 0.0
+[0:0.14:1.761692s] training loss: 1.98728994326666, training accuracy: 0.6796875, training recall: 0.0
+[0:0.16:1.629935s] training loss: 1.7831056993454695, training accuracy: 0.7578125, training recall: 0.0
+[0:0.18:1.341526s] training loss: 1.7635273050982505, training accuracy: 0.734375, training recall: 1.0
+[0:0.2:1.467295s] training loss: 1.1158334403298795, training accuracy: 0.765625, training recall: 0.0
+[0:0.22:1.482381s] training loss: 1.4855445275679813, training accuracy: 0.734375, training recall: 0.5
+[0:0.24:1.445297s] training loss: 2.0631422689184546, training accuracy: 0.6640625, training recall: 0.0
+[0:0.26:1.469771s] training loss: 1.4318276066333055, training accuracy: 0.8046875, training recall: 0.0
+[0:0.28:1.572237s] training loss: 1.5536113497801125, training accuracy: 0.703125, training recall: 1.0
+[0:0.3:1.986415s] training loss: 1.3752242242917418, training accuracy: 0.6953125, training recall: 0.5
+[0:0.32:1.484233s] training loss: 1.5654486939311028, training accuracy: 0.7109375, training recall: 0.0
+[0:0.34:1.560451s] training loss: 1.5712722958996892, training accuracy: 0.703125, training recall: 0.0
+[0:0.36:1.359259s] training loss: 1.6526267686858773, training accuracy: 0.75, training recall: 0.0
+[0:0.38:1.561586s] training loss: 1.6815892346203327, training accuracy: 0.640625, training recall: 1.0
+[0:0.4:1.815159s] training loss: 1.6041760230436921, training accuracy: 0.71875, training recall: 0.0
+[0:0.42:1.597624s] training loss: 1.4776467336341739, training accuracy: 0.75, training recall: 0.0
+[0:0.44:1.537539s] training loss: 1.4668190623633564, training accuracy: 0.7265625, training recall: 0.0
+[0:0.46:1.380171s] training loss: 1.3052913688588887, training accuracy: 0.75, training recall: 0.0
+[0:0.48:1.789986s] training loss: 1.4662022325210273, training accuracy: 0.71875, training recall: 0.3333333333333333
+[0:0.5:1.966776s] training loss: 1.1509871631860733, training accuracy: 0.7109375, training recall: 0.5
+[0:0.52:1.654017s] training loss: 1.2098692233266775, training accuracy: 0.765625, training recall: 0.0
+[0:0.54:1.755357s] training loss: 1.8365082778036594, training accuracy: 0.6796875, training recall: 1.0
+[0:0.56:1.584922s] training loss: 1.7866124876309186, training accuracy: 0.75, training recall: 0.0
+[0:0.58:1.593552s] training loss: 1.4226869940757751, training accuracy: 0.6953125, training recall: 0.5
+[0:0.6:1.785019s] training loss: 1.1620332039892673, training accuracy: 0.734375, training recall: 1.0
+[0:0.62:1.766703s] training loss: 0.969112113583833, training accuracy: 0.734375, training recall: 0.0
+[0:0.64:1.756973s] training loss: 1.0878374257590622, training accuracy: 0.7578125, training recall: 0.0
+[0:0.66:1.637398s] training loss: 1.1008288180455565, training accuracy: 0.765625, training recall: 0.0
+[0:0.68:1.713292s] training loss: 1.4257140755653381, training accuracy: 0.71875, training recall: 0.0
+[0:0.7:1.346958s] training loss: 0.8036155193112791, training accuracy: 0.8046875, training recall: 0.0
+[0:0.72:1.693948s] training loss: 1.1501932608662173, training accuracy: 0.71875, training recall: 0.5
+[0:0.74:1.653027s] training loss: 1.2733882495667785, training accuracy: 0.6875, training recall: 1.0
+[0:0.76:1.865552s] training loss: 0.8804683489724994, training accuracy: 0.7890625, training recall: 0.5
+[0:0.78:1.594837s] training loss: 1.0608321423642337, training accuracy: 0.7265625, training recall: 1.0
+[0:0.8:1.905689s] training loss: 1.063410222530365, training accuracy: 0.765625, training recall: 0.0
+[0:0.82:1.678597s] training loss: 1.0425992123782635, training accuracy: 0.671875, training recall: 0.0
+[0:0.84:1.500055s] training loss: 1.155817202059552, training accuracy: 0.75, training recall: 0.0
+[0:0.86:1.557184s] training loss: 0.909684763289988, training accuracy: 0.765625, training recall: 0.25
+[0:0.88:1.577996s] training loss: 0.6071510291658342, training accuracy: 0.7734375, training recall: 0.0
+[0:0.9:1.608701s] training loss: 0.6835893406532705, training accuracy: 0.8046875, training recall: 0.0
+[0:0.92:1.676723s] training loss: 0.8581198779866099, training accuracy: 0.734375, training recall: 0.0
+[0:0.94:1.669043s] training loss: 0.7418234002543613, training accuracy: 0.8046875, training recall: 0.0
+[0:0.96:1.361662s] training loss: 0.8131461623124778, training accuracy: 0.734375, training recall: 0.5
+[0:0.98:1.797866s] training loss: 0.8278355170041323, training accuracy: 0.796875, training recall: 0.0
+Running validation...
+[0:0.08] loss: 1.643458679318428, accuracy: 0.6640625, recall: 0.0
+[0:0.16] loss: 1.5467846393585205, accuracy: 0.625, recall: 0.0
+[0:0.24] loss: 1.5467846393585205, accuracy: 0.625, recall: 0.0
+[0:0.32] loss: 1.5467846393585205, accuracy: 0.625, recall: 0.0
+[0:0.4] loss: 1.5467846393585205, accuracy: 0.625, recall: 0.0
+[0:0.48] loss: 1.5467846393585205, accuracy: 0.625, recall: 0.0
+[0:0.56] loss: 1.5467846393585205, accuracy: 0.625, recall: 0.0
+[0:0.64] loss: 1.5467846393585205, accuracy: 0.625, recall: 0.0
+[0:0.72] loss: 1.5467846393585205, accuracy: 0.625, recall: 0.0
+[0:0.8] loss: 1.5467846393585205, accuracy: 0.625, recall: 0.0
+[0:0.88] loss: 1.5467846393585205, accuracy: 0.625, recall: 0.0
+[0:0.96] loss: 1.5467846393585205, accuracy: 0.625, recall: 0.0
+[0] mean accuracy: 0.7328125238418579
+=> Saving a new best
+[1:0.02:1.790407s] training loss: 0.6766719100996852, training accuracy: 0.828125, training recall: 0.0
+[1:0.04:1.729026s] training loss: 0.7068688278086483, training accuracy: 0.71875, training recall: 0.0
+[1:0.06:1.976571s] training loss: 0.5333640808239579, training accuracy: 0.796875, training recall: 1.0
+[1:0.08:1.701501s] training loss: 0.7337002027779818, training accuracy: 0.7734375, training recall: 0.0
+[1:0.1:1.686112s] training loss: 0.4146875604055822, training accuracy: 0.796875, training recall: 0.0
+[1:0.12:1.689502s] training loss: 0.6148916233796626, training accuracy: 0.828125, training recall: 0.0
+[1:0.14:1.606292s] training loss: 0.7469601687043905, training accuracy: 0.75, training recall: 0.0
+[1:0.16:1.578168s] training loss: 0.479857764672488, training accuracy: 0.8125, training recall: 1.0
+[1:0.18:1.796025s] training loss: 0.6114837301429361, training accuracy: 0.796875, training recall: 0.0
+[1:0.2:1.603344s] training loss: 0.6349358353763819, training accuracy: 0.7734375, training recall: 1.0
+[1:0.22:1.441062s] training loss: 0.5678404234349728, training accuracy: 0.765625, training recall: 0.6666666666666666
+[1:0.24:1.700801s] training loss: 0.404297168366611, training accuracy: 0.8359375, training recall: 1.0
+[1:0.26:1.393994s] training loss: 0.58980130427517, training accuracy: 0.7890625, training recall: 1.0
+[1:0.28:1.717066s] training loss: 0.4328337339684367, training accuracy: 0.8359375, training recall: 0.0
+[1:0.3:1.572278s] training loss: 0.36349094519391656, training accuracy: 0.8671875, training recall: 1.0
+[1:0.32:1.562827s] training loss: 0.2806573938578367, training accuracy: 0.8828125, training recall: 1.0
+[1:0.34:1.626999s] training loss: 0.3926287768408656, training accuracy: 0.875, training recall: 0.5
+[1:0.36:1.624258s] training loss: 0.554046540055424, training accuracy: 0.8359375, training recall: 0.0
+[1:0.38:1.377216s] training loss: 0.3284959208685905, training accuracy: 0.859375, training recall: 1.0
+[1:0.4:1.836471s] training loss: 0.5950589356943965, training accuracy: 0.8046875, training recall: 0.0
+[1:0.42:1.794727s] training loss: 0.39580009039491415, training accuracy: 0.796875, training recall: 0.5
+[1:0.44:1.499227s] training loss: 0.46750780544243753, training accuracy: 0.8125, training recall: 1.0
+[1:0.46:1.625941s] training loss: 0.31805950379930437, training accuracy: 0.859375, training recall: 0.0
+[1:0.48:1.903980s] training loss: 0.3308745794929564, training accuracy: 0.890625, training recall: 0.0
+[1:0.5:1.650262s] training loss: 0.3076979569159448, training accuracy: 0.8984375, training recall: 0.5
+[1:0.52:1.682921s] training loss: 0.3239758377894759, training accuracy: 0.875, training recall: 1.0
+[1:0.54:1.522296s] training loss: 0.36344807501882315, training accuracy: 0.84375, training recall: 0.5
+[1:0.56:2.144951s] training loss: 0.34796341974288225, training accuracy: 0.8515625, training recall: 0.5
+[1:0.58:1.698655s] training loss: 0.33196922950446606, training accuracy: 0.859375, training recall: 0.0
+[1:0.6:1.654287s] training loss: 0.37578451447188854, training accuracy: 0.828125, training recall: 0.5
+[1:0.62:1.525563s] training loss: 0.3108547106385231, training accuracy: 0.84375, training recall: 1.0
+[1:0.64:1.610599s] training loss: 0.381292020669207, training accuracy: 0.8515625, training recall: 0.0
+[1:0.66:1.624164s] training loss: 0.35726884566247463, training accuracy: 0.8515625, training recall: 1.0
+[1:0.68:1.740733s] training loss: 0.34624173771589994, training accuracy: 0.8515625, training recall: 0.0
+[1:0.7:1.449246s] training loss: 0.34541636146605015, training accuracy: 0.8359375, training recall: 0.5
+[1:0.72:1.544621s] training loss: 0.3579387296922505, training accuracy: 0.8515625, training recall: 1.0
+[1:0.74:1.924309s] training loss: 0.40871973242610693, training accuracy: 0.8125, training recall: 0.0
+[1:0.76:1.428034s] training loss: 0.4606852298602462, training accuracy: 0.8203125, training recall: 0.0
+[1:0.78:1.341936s] training loss: 0.34960790257900953, training accuracy: 0.8359375, training recall: 0.0
+[1:0.8:1.690659s] training loss: 0.3198214606381953, training accuracy: 0.859375, training recall: 0.0
+[1:0.82:1.372239s] training loss: 0.2654005184303969, training accuracy: 0.8828125, training recall: 1.0
+[1:0.84:1.520710s] training loss: 0.30467129312455654, training accuracy: 0.8984375, training recall: 1.0
+[1:0.86:1.324038s] training loss: 0.303582139313221, training accuracy: 0.8671875, training recall: 0.0
+[1:0.88:1.642835s] training loss: 0.3516188086941838, training accuracy: 0.828125, training recall: 0.0
+[1:0.9:1.611845s] training loss: 0.3758201338350773, training accuracy: 0.859375, training recall: 0.75
+[1:0.92:1.712033s] training loss: 0.301265190821141, training accuracy: 0.859375, training recall: 0.0
+[1:0.94:1.505953s] training loss: 0.4322487178724259, training accuracy: 0.859375, training recall: 1.0
+[1:0.96:1.789186s] training loss: 0.2476060725748539, training accuracy: 0.8828125, training recall: 0.0
+[1:0.98:1.756561s] training loss: 0.3324383972212672, training accuracy: 0.859375, training recall: 0.5
+Running validation...
+[1:0.08] loss: 0.35526988469064236, accuracy: 0.9296875, recall: 0.5
+[1:0.16] loss: 0.3343716561794281, accuracy: 0.875, recall: 0.5
+[1:0.24] loss: 0.3343716561794281, accuracy: 0.875, recall: 0.5
+[1:0.32] loss: 0.3343716561794281, accuracy: 0.875, recall: 0.5
+[1:0.4] loss: 0.3343716561794281, accuracy: 0.875, recall: 0.5
+[1:0.48] loss: 0.3343716561794281, accuracy: 0.875, recall: 0.5
+[1:0.56] loss: 0.3343716561794281, accuracy: 0.875, recall: 0.5
+[1:0.64] loss: 0.3343716561794281, accuracy: 0.875, recall: 0.5
+[1:0.72] loss: 0.3343716561794281, accuracy: 0.875, recall: 0.5
+[1:0.8] loss: 0.3343716561794281, accuracy: 0.875, recall: 0.5
+[1:0.88] loss: 0.3343716561794281, accuracy: 0.875, recall: 0.5
+[1:0.96] loss: 0.3343716561794281, accuracy: 0.875, recall: 0.5
+[1] mean accuracy: 0.8353124856948853
+=> Saving a new best
+Loading data/small
+Model with dropout!
+Let's use 1 GPU(s)!
+Created model with 52,718,058 parameters.
+Created dataset...
+Num Distinct Claims 109810
+Num Data Points 125050
+Num Distinct Claims 109810
+Num Data Points 125050
+{ data batch size: 8 }
+{ learning rate: 0.001 }
+{ sparse_evidences: False }
+{ loss: BCEWithLogitsLoss }
+{ data: data/small }
+{ training size: 800 }
+{ batch size: 1 }
+{ epochs: 2 }
+{ optimizer: Adam }
+Training...
+[0:0.02:2.907552s] training loss: 3.2201793093263404, training accuracy: 0.7734375, training recall: 1.0
+[0:0.04:2.642347s] training loss: 3.221892437468341, training accuracy: 0.734375, training recall: 0.0
+[0:0.06:3.253891s] training loss: 3.210664635989815, training accuracy: 0.6640625, training recall: 0.0
+[0:0.08:2.244245s] training loss: 2.748651122819865, training accuracy: 0.6875, training recall: 0.0
+[0:0.1:3.440181s] training loss: 3.3229784052819014, training accuracy: 0.6484375, training recall: 0.0
+[0:0.12:2.460248s] training loss: 2.3887702068313956, training accuracy: 0.7109375, training recall: 0.0
+[0:0.14:3.501467s] training loss: 2.3069399325177073, training accuracy: 0.703125, training recall: 0.5
+[0:0.16:2.560524s] training loss: 2.5985734269488603, training accuracy: 0.765625, training recall: 0.5
+[0:0.18:3.399235s] training loss: 3.096547821885906, training accuracy: 0.71875, training recall: 0.0
+[0:0.2:2.449790s] training loss: 2.380693088285625, training accuracy: 0.78125, training recall: 1.0
+[0:0.22:3.458036s] training loss: 2.175698361825198, training accuracy: 0.8046875, training recall: 0.0
+[0:0.24:2.755979s] training loss: 2.482026582583785, training accuracy: 0.6875, training recall: 0.0
+[0:0.26:3.260757s] training loss: 2.6613409090787172, training accuracy: 0.6328125, training recall: 0.0
+[0:0.28:2.507471s] training loss: 2.495532840470787, training accuracy: 0.78125, training recall: 1.0
+[0:0.3:2.228002s] training loss: 4.044905906077474, training accuracy: 0.625, training recall: 0.0
+[0:0.32:3.209422s] training loss: 2.20362893154379, training accuracy: 0.671875, training recall: 0.0
+[0:0.34:3.506223s] training loss: 2.464168141130358, training accuracy: 0.6640625, training recall: 1.0
+[0:0.36:2.760761s] training loss: 2.282376781105995, training accuracy: 0.7890625, training recall: 0.0
+[0:0.38:3.227114s] training loss: 2.771688774228096, training accuracy: 0.6796875, training recall: 0.0
+[0:0.4:2.618481s] training loss: 2.847048246767372, training accuracy: 0.640625, training recall: 0.0
+[0:0.42:3.414023s] training loss: 2.65843005804345, training accuracy: 0.7265625, training recall: 0.0
+[0:0.44:2.526261s] training loss: 1.7796866362068613, training accuracy: 0.734375, training recall: 0.0
+[0:0.46:3.150177s] training loss: 1.4408193613635376, training accuracy: 0.7578125, training recall: 0.0
+[0:0.48:2.570828s] training loss: 2.578956924378872, training accuracy: 0.65625, training recall: 0.0
+[0:0.5:2.279073s] training loss: 1.8249185308814049, training accuracy: 0.78125, training recall: 0.0
+[0:0.52:3.495307s] training loss: 1.8818762376904488, training accuracy: 0.703125, training recall: 0.0
+[0:0.54:1.531745s] training loss: 2.0788686256855726, training accuracy: 0.7421875, training recall: 0.0
+[0:0.56:1.558903s] training loss: 1.7664635637775064, training accuracy: 0.71875, training recall: 0.0
+[0:0.58:1.828994s] training loss: 1.785342223229236, training accuracy: 0.8515625, training recall: 0.0
+[0:0.6:1.788460s] training loss: 2.132957054185681, training accuracy: 0.703125, training recall: 0.0
+[0:0.62:1.751368s] training loss: 1.535471105016768, training accuracy: 0.7421875, training recall: 0.0
+[0:0.64:1.668330s] training loss: 1.8265665536746383, training accuracy: 0.71875, training recall: 0.5
+[0:0.66:1.635805s] training loss: 1.468316076146948, training accuracy: 0.7265625, training recall: 0.0
+[0:0.68:1.880821s] training loss: 1.9770766613073647, training accuracy: 0.6953125, training recall: 1.0
+[0:0.7:1.588350s] training loss: 1.8985918976832181, training accuracy: 0.7265625, training recall: 1.0
+[0:0.72:1.688732s] training loss: 2.206326447427273, training accuracy: 0.671875, training recall: 0.0
+[0:0.74:1.820281s] training loss: 1.845008349046111, training accuracy: 0.734375, training recall: 0.0
+[0:0.76:1.701261s] training loss: 2.01296617067419, training accuracy: 0.734375, training recall: 0.0
+[0:0.78:1.872018s] training loss: 1.6095565115101635, training accuracy: 0.71875, training recall: 1.0
+[0:0.8:1.625052s] training loss: 2.2640599138394464, training accuracy: 0.7421875, training recall: 1.0
+[0:0.82:1.914879s] training loss: 2.030324272811413, training accuracy: 0.703125, training recall: 0.0
+[0:0.84:1.820615s] training loss: 1.7830087318725418, training accuracy: 0.78125, training recall: 1.0
+[0:0.86:1.962955s] training loss: 1.6330870371311903, training accuracy: 0.75, training recall: 0.5
+[0:0.88:1.803305s] training loss: 1.5177079886198044, training accuracy: 0.71875, training recall: 0.0
+[0:0.9:1.874948s] training loss: 1.9056008839979768, training accuracy: 0.703125, training recall: 1.0
+[0:0.92:1.895457s] training loss: 1.2284981037955731, training accuracy: 0.65625, training recall: 0.0
+[0:0.94:1.598988s] training loss: 1.448555339127779, training accuracy: 0.8359375, training recall: 1.0
+[0:0.96:2.133621s] training loss: 1.3240299196913838, training accuracy: 0.703125, training recall: 0.5
+[0:0.98:1.625945s] training loss: 1.7666459828615189, training accuracy: 0.6953125, training recall: 0.0
+Running validation...
+[0:0.08] loss: 2.2646602392196655, accuracy: 0.9296875, recall: 0.0
+[0:0.16] loss: 2.1314449310302734, accuracy: 0.875, recall: 0.0
+[0:0.24] loss: 2.1314449310302734, accuracy: 0.875, recall: 0.0
+[0:0.32] loss: 2.1314449310302734, accuracy: 0.875, recall: 0.0
+[0:0.4] loss: 2.1314449310302734, accuracy: 0.875, recall: 0.0
+[0:0.48] loss: 2.1314449310302734, accuracy: 0.875, recall: 0.0
+[0:0.56] loss: 2.1314449310302734, accuracy: 0.875, recall: 0.0
+[0:0.64] loss: 2.1314449310302734, accuracy: 0.875, recall: 0.0
+[0:0.72] loss: 2.1314449310302734, accuracy: 0.875, recall: 0.0
+[0:0.8] loss: 2.1314449310302734, accuracy: 0.875, recall: 0.0
+[0:0.88] loss: 2.1314449310302734, accuracy: 0.875, recall: 0.0
+[0:0.96] loss: 2.1314449310302734, accuracy: 0.875, recall: 0.0
+[0] mean accuracy: 0.7204687595367432
+=> Saving a new best
+[1:0.02:1.901477s] training loss: 1.1137547091639135, training accuracy: 0.890625, training recall: 1.0
+[1:0.04:1.874347s] training loss: 1.2654199449170846, training accuracy: 0.734375, training recall: 0.0
+[1:0.06:2.114561s] training loss: 1.4749444127082825, training accuracy: 0.765625, training recall: 0.0
+[1:0.08:1.754646s] training loss: 1.0426720400355407, training accuracy: 0.7890625, training recall: 0.5
+[1:0.1:1.886310s] training loss: 1.0530964864883572, training accuracy: 0.8046875, training recall: 0.0
+[1:0.12:1.591209s] training loss: 1.2466447139158845, training accuracy: 0.75, training recall: 1.0
+[1:0.14:1.678609s] training loss: 0.9811171852052212, training accuracy: 0.765625, training recall: 0.0
+[1:0.16:1.793899s] training loss: 1.1584612429141998, training accuracy: 0.71875, training recall: 1.0
+[1:0.18:1.655316s] training loss: 1.3545797164551914, training accuracy: 0.796875, training recall: 0.5
+[1:0.2:1.773507s] training loss: 0.8793401047587395, training accuracy: 0.796875, training recall: 1.0
+[1:0.22:1.610855s] training loss: 1.1451940285041928, training accuracy: 0.7109375, training recall: 0.0
+[1:0.24:1.555208s] training loss: 1.0953840233851224, training accuracy: 0.8203125, training recall: 1.0
+[1:0.26:1.745916s] training loss: 0.9060560180805624, training accuracy: 0.75, training recall: 0.0
+[1:0.28:1.924163s] training loss: 0.9225911235007516, training accuracy: 0.8828125, training recall: 1.0
+[1:0.3:1.756404s] training loss: 0.8500484398682602, training accuracy: 0.8515625, training recall: 0.25
+[1:0.32:1.982041s] training loss: 1.1270469767041504, training accuracy: 0.7109375, training recall: 1.0
+[1:0.34:1.744665s] training loss: 1.0218886211514473, training accuracy: 0.7890625, training recall: 0.0
+[1:0.36:1.799723s] training loss: 0.843165829544887, training accuracy: 0.71875, training recall: 1.0
+[1:0.38:1.763165s] training loss: 0.6739743375292164, training accuracy: 0.8828125, training recall: 1.0
+[1:0.4:1.680393s] training loss: 0.6683949767611921, training accuracy: 0.84375, training recall: 0.0
+[1:0.42:1.691595s] training loss: 0.8289162827131804, training accuracy: 0.7890625, training recall: 1.0
+[1:0.44:1.781530s] training loss: 0.5593538455141243, training accuracy: 0.859375, training recall: 0.0
+[1:0.46:1.961230s] training loss: 0.8750009657815099, training accuracy: 0.796875, training recall: 1.0
+[1:0.48:1.896954s] training loss: 0.7754908910574159, training accuracy: 0.84375, training recall: 0.0
+[1:0.5:2.076347s] training loss: 0.8714822182082571, training accuracy: 0.796875, training recall: 1.0
+[1:0.52:1.737730s] training loss: 0.6686870232806541, training accuracy: 0.8046875, training recall: 0.0
+[1:0.54:1.773992s] training loss: 0.7463656021864153, training accuracy: 0.8046875, training recall: 1.0
+[1:0.56:1.863679s] training loss: 0.5950263919075951, training accuracy: 0.84375, training recall: 0.5
+[1:0.58:1.817453s] training loss: 0.46146254800260067, training accuracy: 0.8515625, training recall: 0.0
+[1:0.6:1.589539s] training loss: 0.5189191796525847, training accuracy: 0.859375, training recall: 1.0
+[1:0.62:1.581773s] training loss: 0.5745497156167403, training accuracy: 0.8359375, training recall: 0.5
+[1:0.64:1.886483s] training loss: 0.9339822852052748, training accuracy: 0.7890625, training recall: 1.0
+[1:0.66:1.384642s] training loss: 0.7184156246366911, training accuracy: 0.7734375, training recall: 0.0
+[1:0.68:1.865227s] training loss: 0.8325746378395706, training accuracy: 0.8203125, training recall: 1.0
+[1:0.7:1.744332s] training loss: 0.6333266785368323, training accuracy: 0.8125, training recall: 0.0
+[1:0.72:1.711574s] training loss: 0.6186854783445597, training accuracy: 0.78125, training recall: 1.0
+[1:0.74:1.895996s] training loss: 0.5237115698400885, training accuracy: 0.828125, training recall: 1.0
+[1:0.76:1.856746s] training loss: 0.5210837577469647, training accuracy: 0.828125, training recall: 0.0
+[1:0.78:1.581324s] training loss: 0.5818733708001673, training accuracy: 0.7734375, training recall: 0.0
+[1:0.8:1.887546s] training loss: 0.710818893101532, training accuracy: 0.8125, training recall: 1.0
+[1:0.82:1.806897s] training loss: 0.5469755781814456, training accuracy: 0.8125, training recall: 0.0
+[1:0.84:1.550565s] training loss: 0.6956516111968085, training accuracy: 0.7890625, training recall: 0.75
+[1:0.86:1.729720s] training loss: 0.557975257281214, training accuracy: 0.796875, training recall: 0.0
+[1:0.88:1.837265s] training loss: 0.5386152025312185, training accuracy: 0.796875, training recall: 0.0
+[1:0.9:1.789729s] training loss: 0.610389078501612, training accuracy: 0.796875, training recall: 0.0
+[1:0.92:1.880265s] training loss: 0.6087600160390139, training accuracy: 0.7890625, training recall: 0.0
+[1:0.94:1.675622s] training loss: 0.6395999975502491, training accuracy: 0.7578125, training recall: 0.0
+[1:0.96:1.883381s] training loss: 0.6383856181055307, training accuracy: 0.78125, training recall: 1.0
+[1:0.98:2.069027s] training loss: 0.6708082715049386, training accuracy: 0.78125, training recall: 1.0
+Running validation...
+[1:0.08] loss: 0.3507625348865986, accuracy: 0.9296875, recall: 0.5
+[1:0.16] loss: 0.3301294445991516, accuracy: 0.875, recall: 0.5
+[1:0.24] loss: 0.3301294445991516, accuracy: 0.875, recall: 0.5
+[1:0.32] loss: 0.3301294445991516, accuracy: 0.875, recall: 0.5
+[1:0.4] loss: 0.3301294445991516, accuracy: 0.875, recall: 0.5
+[1:0.48] loss: 0.3301294445991516, accuracy: 0.875, recall: 0.5
+[1:0.56] loss: 0.3301294445991516, accuracy: 0.875, recall: 0.5
+[1:0.64] loss: 0.3301294445991516, accuracy: 0.875, recall: 0.5
+[1:0.72] loss: 0.3301294445991516, accuracy: 0.875, recall: 0.5
+[1:0.8] loss: 0.3301294445991516, accuracy: 0.875, recall: 0.5
+[1:0.88] loss: 0.3301294445991516, accuracy: 0.875, recall: 0.5
+[1:0.96] loss: 0.3301294445991516, accuracy: 0.875, recall: 0.5
+[1] mean accuracy: 0.7996875047683716
+=> Saving a new best
+--------------------------------------------------------------------------------
+  Environment Summary
+--------------------------------------------------------------------------------
+PyTorch 0.4.1 compiled w/ CUDA 8.0.61
+Running with Python 3.5 and 
+
+`pip list` truncated output:
+Unable to fetch
+--------------------------------------------------------------------------------
+  cProfile output
+--------------------------------------------------------------------------------
+         179921596 function calls (179728419 primitive calls) in 310.482 seconds
+
+   Ordered by: internal time
+   List reduced from 9437 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     4366   71.164    0.016   71.164    0.016 {built-in method numpy.core.multiarray.copyto}
+     4000   21.213    0.005   92.789    0.023 /data/sls/u/urop/mnadeem/CDSSM_github/pytorch_data_loader.py:147(stack_uneven)
+     3600   20.193    0.006   20.193    0.006 {method 'mean' of 'torch._C._TensorBase' objects}
+     7620   20.183    0.003   20.183    0.003 {method 'cuda' of 'torch._C._TensorBase' objects}
+        6   12.815    2.136   65.309   10.885 /usr/lib/python3.5/pickle.py:1014(load)
+     1620    8.675    0.005    8.675    0.005 {method 'to' of 'torch._C._TensorBase' objects}
+     1600    8.372    0.005    8.372    0.005 {method 'run_backward' of 'torch._C._EngineBase' objects}
+ 28833174    7.607    0.000   11.749    0.000 /usr/lib/python3.5/pickle.py:226(read)
+        1    7.546    7.546  245.792  245.792 clsm_pytorch.py:55(run)
+    66001    7.076    0.000    7.076    0.000 {built-in method numpy.core.multiarray.zeros}
+   812033    5.773    0.000    5.773    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+ 29179332    4.565    0.000    4.565    0.000 {method 'read' of '_io.BufferedReader' objects}
+   346136    4.437    0.000   12.384    0.000 /data/sls/u/urop/mnadeem/my_venv/lib/python3.5/site-packages/joblib/numpy_pickle.py:106(read_array)
+        2    3.805    1.903    3.805    1.903 {method 'close' of '_io.BufferedWriter' objects}
+     6000    3.547    0.001    3.547    0.001 {built-in method conv1d}
+
+
+--------------------------------------------------------------------------------
+  autograd profiler output (CPU mode)
+--------------------------------------------------------------------------------
+        top 15 events sorted by cpu_time_total
+
+------------  ---------------  ---------------  ---------------  ---------------  ---------------
+Name                 CPU time        CUDA time            Calls        CPU total       CUDA total
+------------  ---------------  ---------------  ---------------  ---------------  ---------------
+uniform_         380120.815us          0.000us                1     380120.815us          0.000us
+uniform_         295232.994us          0.000us                1     295232.994us          0.000us
+uniform_         286413.407us          0.000us                1     286413.407us          0.000us
+uniform_         281958.053us          0.000us                1     281958.053us          0.000us
+mean              37146.238us          0.000us                1      37146.238us          0.000us
+mean              35374.879us          0.000us                1      35374.879us          0.000us
+mean              24248.226us          0.000us                1      24248.226us          0.000us
+mean              23398.459us          0.000us                1      23398.459us          0.000us
+mean              23031.473us          0.000us                1      23031.473us          0.000us
+mean              22305.312us          0.000us                1      22305.312us          0.000us
+mean              21449.057us          0.000us                1      21449.057us          0.000us
+mean              21179.416us          0.000us                1      21179.416us          0.000us
+mean              21168.822us          0.000us                1      21168.822us          0.000us
+mean              20761.019us          0.000us                1      20761.019us          0.000us
+mean              20713.925us          0.000us                1      20713.925us          0.000us
+
+--------------------------------------------------------------------------------
+  autograd profiler output (CUDA mode)
+--------------------------------------------------------------------------------
+        top 15 events sorted by cpu_time_total
+
+	Because the autograd profiler uses the CUDA event API,
+	the CUDA time column reports approximately max(cuda_time, cpu_time).
+	Please ignore this output if your code does not use CUDA.
+
+------------------  ---------------  ---------------  ---------------  ---------------  ---------------
+Name                       CPU time        CUDA time            Calls        CPU total       CUDA total
+------------------  ---------------  ---------------  ---------------  ---------------  ---------------
+ExpBackward            864587.687us     864550.781us                1     864587.687us     864550.781us
+mul                    864572.023us     864535.156us                1     864572.023us     864535.156us
+add                    836805.395us     821511.719us                1     836805.395us     821511.719us
+_th_get_device         836635.033us     821355.469us                1     836635.033us     821355.469us
+ViewBackward           835405.869us     834093.750us                1     835405.869us     834093.750us
+reshape                835363.967us     834078.125us                1     835363.967us     834078.125us
+MmBackward             832343.973us     830591.797us                1     832343.973us     830591.797us
+mm                     832215.349us     830550.781us                1     832215.349us     830550.781us
+add                    778899.768us     765046.875us                1     778899.768us     765046.875us
+_th_get_device         778725.279us     764898.438us                1     778725.279us     764898.438us
+Scatter                754150.299us     754054.688us                1     754150.299us     754054.688us
+_th_get_device         749047.608us     748968.750us                1     749047.608us     748968.750us
+add_                   704861.748us     695902.344us                1     704861.748us     695902.344us
+th_add_                704806.990us     695871.094us                1     704806.990us     695871.094us
+matmul                 702950.014us     693304.688us                1     702950.014us     693304.688us
+

@@ -2,4 +2,4 @@
 __pycache__/**
 logs/**
 **saved_model**
-
+notebooks/.ipynb_checkpoints/**
