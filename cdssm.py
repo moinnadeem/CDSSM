@@ -36,10 +36,8 @@ class CDSSM(nn.Module):
         super(CDSSM, self).__init__()
         # layers for query
         self.query_conv = nn.Conv1d(WORD_DEPTH, K, FILTER_LENGTH)
-        self.second_query_conv = nn.Conv1d(K, K, FILTER_LENGTH)
         # adding Xavier-He initialization
         torch.nn.init.xavier_uniform_(self.query_conv.weight)
-        torch.nn.init.xavier_uniform_(self.second_query_conv.weight)
 
         # learn the semantic representation
         self.query_sem = nn.Linear(K, L)
@@ -56,9 +54,7 @@ class CDSSM(nn.Module):
 
         # layers for docs
         self.doc_conv = nn.Conv1d(WORD_DEPTH, K, FILTER_LENGTH)
-        self.second_doc_conv = nn.Conv1d(K, K, FILTER_LENGTH)
         torch.nn.init.xavier_uniform_(self.doc_conv.weight)
-        torch.nn.init.xavier_uniform_(self.second_doc_conv.weight)
         self.doc_sem = nn.Linear(K, L)
         torch.nn.init.xavier_uniform_(self.doc_sem.weight)
 
@@ -83,7 +79,6 @@ class CDSSM(nn.Module):
         # That is, h_Q = tanh(W_c • l_Q + b_c). Note: the paper does not include bias units.
         q_c = torch.tanh(self.query_conv(q))
         q_c = self.q_norm(q_c)
-        q_c = torch.tanh(self.second_query_conv(q_c))
 
         # Next, we apply a max-pooling layer to the convolved query matrix.
         q_k = kmax_pooling(q_c, 2, 1)
@@ -102,7 +97,6 @@ class CDSSM(nn.Module):
 
         pos_c = torch.tanh(self.doc_conv(pos))
         pos_c = self.doc_norm(pos_c)
-        pos_c = torch.tanh(self.second_doc_conv(pos_c))
 
         pos_k = kmax_pooling(pos_c, 2, 1)
         pos_k = pos_k.transpose(1,2)
