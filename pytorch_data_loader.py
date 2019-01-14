@@ -81,6 +81,8 @@ class PadCollate:
             dim - the dimension to be padded (dimension of time in sequences)
         """
         self.dim = dim
+        use_cuda = True
+        self.device = torch.device("cuda" if use_cuda else "cpu")
 
     def pad_collate(self, batch):
         """
@@ -125,7 +127,7 @@ class WikiDataset(Dataset):
     """
     Generates data with batch size of 1 sample for the purposes of training our model.
     """
-    def __init__(self, data, claims_dict, data_batch_size=10, batch_size=32, split=None, randomize=True, testFile="train.jsonl", sparse_evidences=None):
+    def __init__(self, data, claims_dict, data_sampling=10, batch_size=32, split=None, randomize=True, testFile="train.jsonl", sparse_evidences=None):
         """
             Sets the initial arguments and creates
             an indicies array to randomize the dataset
@@ -141,9 +143,9 @@ class WikiDataset(Dataset):
             self.evidence_to_sparse = sparse_evidences 
         else:
             self.evidence_to_sparse = None
-        use_cuda = False 
-        self.device = torch.device("cuda" if use_cuda else "cpu")
-        self.data_batch_size = data_batch_size
+        use_cuda = True 
+        self.device = torch.device("cuda:0" if use_cuda else "cpu")
+        self.data_sampling = data_sampling 
         self.encoder = utils.ClaimEncoder()
         self.claims_dict = claims_dict
         self.batch_size = batch_size
@@ -156,7 +158,7 @@ class WikiDataset(Dataset):
         return self.get_item(index)
     
     def get_item(self, index):            
-        #data_index = index % self.data_batch_size
+        #data_index = index % self.data_sampling
         item_index = index 
         
         d = self.data[item_index]  # get training item 
@@ -165,7 +167,7 @@ class WikiDataset(Dataset):
         #claim = sparse.vstack(claim).toarray()  # turn it into a array
         claim = self.claims_dict[d['claim']]
         claim = claim.toarray()
-        claim = torch.Tensor(claim).to(self.device)
+        claim = torch.Tensor(claim).cuda()
         claim_text = d['claim']
         #claim = sparse.vstack(self.encoder.tokenize_claim(utils.preprocess_article_name(d['claim']))).toarray()
 
@@ -190,7 +192,7 @@ class WikiDataset(Dataset):
                 evidence = sparse.vstack(evidence)
 
             evidence = evidence.toarray()
-            evidence = torch.Tensor(evidence).to(self.device)
+            evidence = torch.Tensor(evidence).cuda()
 
             evidence_text.append(processed)
             evidence_tensors.append(evidence)
@@ -200,7 +202,7 @@ class WikiDataset(Dataset):
             #print("{}, Evidence: {}, label: {}".format(claim_text, processed, 1.0))
             labels.append(1.0)
 
-        for j in range(num_positive_articles, self.data_batch_size):
+        for j in range(num_positive_articles, self.data_sampling):
             if not self.randomize:
                 e = d['evidence'][j]
             else:
@@ -226,7 +228,7 @@ class WikiDataset(Dataset):
 
             if evidence.shape[0]>0:
                 evidence = evidence.toarray()
-                evidence = torch.Tensor(evidence).to(self.device)
+                evidence = torch.Tensor(evidence).cuda()
                 evidence_tensors.append(evidence)
                 evidence_text.append(processed)
 
@@ -281,3 +283,96 @@ def stack_uneven(arrays, fill_value=0.):
       # Overwrite a block slice of `result` with this array `a`
       result[i][slices] = a
     return result
+
+class ValWikiDataset(Dataset):
+    def __init__(self, data, claims_dict, batch_size=1, split=None, testFile="train.jsonl", sparse_evidences=None):
+        """
+        Initializes the class.
+        """
+
+        if split:
+            self.indicies = split
+        else:
+            self.indicies = list(range(len(data)))
+
+        self.data = data[::-1]
+
+        if sparse_evidences:
+            self.evidence_to_sparse = sparse_evidences
+        else:
+            self.evidence_to_sparse = None
+
+        use_cuda = True
+        self.device = torch.device("cuda:0" if use_cuda else "cpu")
+        self.encoder = utils.ClaimEncoder()
+        self.claims_dict = claims_dict
+        self.batch_size = batch_size
+        _, _, _, _, self.claim_to_article = utils.extract_fever_jsonl_data(testFile)
+
+    def __len__(self):
+        return (len(self.data)*400)//self.batch_size
+
+    def __getitem__(self, index):
+        return self.get_item(index)
+
+    def get_item(self, index):
+        claim_index = (index*self.batch_size)//400
+        evidences_idx = (index*self.batch_size)%400
+
+        d = self.data[claim_index]
+        claim = self.claims_dict[d['claim']]
+        claim = claim.toarray()
+        claim = torch.Tensor(claim).cuda()
+        claim_text = d['claim']
+
+        claim_tensors = []
+        claim_texts = []
+        evidence_tensors = []
+        evidence_text = []
+        labels = []
+
+        for j in range(evidences_idx, evidences_idx+self.batch_size):
+            try:
+                e = d['evidence'][j]
+            except:
+                raise Exception("Out of range, evidence idx is {}, claim_idx is {}".format(j, claim_index))
+
+            processed = utils.preprocess_article_name(e.split("http://wikipedia.org/wiki/")[1])
+
+            if processed=="":
+                evidence = sparse.coo_matrix((10, 29244))
+                print("Zero length evidence encountered. Be careful!")
+            else:
+                if self.evidence_to_sparse:
+                    if processed in self.evidence_to_sparse:
+                        evidence = self.evidence_to_sparse[processed]
+                    else:
+                        print(e)
+                        raise Exception("Some item has not been found in the sparse dataset")
+                else:
+                    evidence = self.encoder.tokenize_claim(processed)
+                    if len(evidence)>0:
+                        evidence = sparse.vstack(evidence)
+
+            if evidence.shape[0]>0:
+                evidence = evidence.toarray()
+                evidence = torch.Tensor(evidence).cuda()
+                evidence_tensors.append(evidence)
+                evidence_text.append(processed)
+
+                claim_texts.append(claim_text)
+                claim_tensors.append(claim)
+                # TODO: This isn't really necessary. 
+                # You could probably steal some performance gains by copying on the GPU.
+
+                if processed in self.claim_to_article[d['claim']]:
+                    labels.append(1.0)
+                else:
+                    labels.append(0.0)
+            else:
+                print(d['claim'], e, "is not positive length!")
+
+        return [claim_tensors, claim_texts, evidence_tensors, evidence_text, labels]
+
+    def on_epoch_end(self):
+        np.random.shuffle(self.indicies)
