@@ -48,7 +48,7 @@ class CDSSM(nn.Module):
         self.document_hidden = nn.Linear(L, L//2)
 
         # dropout for regularization
-        print("Model with dropout and tanh for hidden with deeper convolutions.")
+        print("Model with dropout and tanh.")
         self.query_dropout = nn.Dropout(0.2)
         self.document_dropout = nn.Dropout(0.2)
 
