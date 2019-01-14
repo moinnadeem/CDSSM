@@ -30,7 +30,7 @@ from hyperdash import Experiment, monitor
 from joblib import Parallel, delayed
 from scipy import sparse
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
-from sklearn.metrics import recall_score
+from sklearn.metrics import recall_score, classification_report
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from tqdm import tqdm, tqdm_notebook
@@ -45,10 +45,10 @@ nltk.data.path.append('/usr/users/mnadeem/nltk_data/')
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Learning the optimal convolution for network.')
-    parser.add_argument("--batch-size", type=int, help="Number of queries per batch.", default=1)
+    parser.add_argument("--batch-size", type=int, help="Number of queries per batch.", default=10)
     parser.add_argument("--model", help="Loading a pretrained model.", default=None)
-    parser.add_argument("--data-batch-size", type=int, help="Number of examples per query.", default=8)
-    parser.add_argument("--randomize", default=False, action="store_true")
+    parser.add_argument("--data-sampling", type=int, help="Number of examples per query.", default=8)
+    parser.add_argument("--no-randomize", default=True, action="store_false")
     parser.add_argument("--learning-rate", type=float, help="Learning rate for model.", default=1e-3)
     parser.add_argument("--epochs", type=int, help="Number of epochs to learn for.", default=3)
     parser.add_argument("--data", help="Folder dataset to load file from.", default="data/large/train.pkl")
@@ -58,7 +58,7 @@ def parse_args():
 def run(args, train, sparse_evidences, claims_dict):
     BATCH_SIZE = args.batch_size
     LEARNING_RATE = args.learning_rate
-    DATA_BATCH_SIZE = args.data_batch_size
+    DATA_SAMPLING = args.data_sampling
     NUM_EPOCHS = args.epochs
     MODEL = args.model
     RANDOMIZE = args.randomize
@@ -72,9 +72,8 @@ def run(args, train, sparse_evidences, claims_dict):
     model = model.to(device)
     if torch.cuda.device_count() > 0:
       print("Let's use", torch.cuda.device_count(), "GPU(s)!")
-      model = DataParallelModel(model)
+      model = nn.DataParallel(model)
     print("Created model with {:,} parameters.".format(putils.count_parameters(model)))
-    input("Check GPU usage...")
 
     if MODEL:
       model = torch.load(MODEL)
@@ -82,20 +81,21 @@ def run(args, train, sparse_evidences, claims_dict):
     print("Created dataset...")
     train_size = int(len(train) * 0.8)
     #test = int(len(train) * 0.5)
-    train_dataset = pytorch_data_loader.WikiDataset(train[:train_size], claims_dict, data_batch_size=DATA_BATCH_SIZE, sparse_evidences=sparse_evidences, randomize=RANDOMIZE) 
-    val_dataset = pytorch_data_loader.WikiDataset(train[train_size:], claims_dict, data_batch_size=DATA_BATCH_SIZE, sparse_evidences=sparse_evidences) 
-    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=0, shuffle=True, collate_fn=pytorch_data_loader.PadCollate(), randomize=RANDOMIZE)
-    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=0, shuffle=True, collate_fn=pytorch_data_loader.PadCollate())
+    train_dataset = pytorch_data_loader.WikiDataset(train[:train_size], claims_dict, data_sampling=DATA_SAMPLING, sparse_evidences=sparse_evidences, randomize=RANDOMIZE) 
+    val_dataset = pytorch_data_loader.ValWikiDataset(train[train_size:], claims_dict, batch_size=DATA_SAMPLING*BATCH_SIZE, sparse_evidences=sparse_evidences, randomize=RANDOMIZE) 
+
+    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=0, shuffle=True, collate_fn=pytorch_data_loader.PadCollate())
+    val_dataloader = DataLoader(val_dataset, batch_size=1, num_workers=0, shuffle=False, collate_fn=pytorch_data_loader.PadCollate())
 
     # Loss and optimizer
     criterion = torch.nn.BCEWithLogitsLoss()
-    if torch.cuda.device_count() > 0:
-        print("Let's parallelize the backward pass...")
-        criterion = DataParallelCriterion(criterion)
+    # if torch.cuda.device_count() > 0:
+        # print("Let's parallelize the backward pass...")
+        # criterion = DataParallelCriterion(criterion)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
 
     OUTPUT_FREQ = max(int((len(train_dataset)/BATCH_SIZE)*0.02), 20) 
-    parameters = {"batch size": BATCH_SIZE, "epochs": NUM_EPOCHS, "learning rate": LEARNING_RATE, "optimizer": optimizer.__class__.__name__, "loss": criterion.__class__.__name__, "training size": train_size, "data batch size": DATA_BATCH_SIZE, "data": args.data, "sparse_evidences": args.sparse_evidences}
+    parameters = {"batch size": BATCH_SIZE, "epochs": NUM_EPOCHS, "learning rate": LEARNING_RATE, "optimizer": optimizer.__class__.__name__, "loss": criterion.__class__.__name__, "training size": train_size, "data sampling rate": DATA_SAMPLING, "data": args.data, "sparse_evidences": args.sparse_evidences, "randomize": RANDOMIZE}
     exp_params = {}
     exp = Experiment("CLSM V2")
 
@@ -109,7 +109,7 @@ def run(args, train, sparse_evidences, claims_dict):
 
     print("Training...")
     beginning_time = 0.0
-    best_accuracy = torch.tensor(0.0, dtype=torch.float)
+    best_loss = torch.tensor(0.0, dtype=torch.float)
 
     for epoch in range(NUM_EPOCHS):
         beginning_time = time.time()
@@ -117,6 +117,7 @@ def run(args, train, sparse_evidences, claims_dict):
         train_running_loss = 0.0
         train_running_accuracy = 0.0
         val_running_accuracy = 0.0
+        val_running_loss = 0.0
         model.train()
 
         for train_batch_num, inputs in enumerate(train_dataloader):
@@ -127,20 +128,21 @@ def run(args, train, sparse_evidences, claims_dict):
             #labels = labels.to(device)
 
             y_pred = model(claims_tensors, evidences_tensors)
+
             y = (labels).float()
             y = y.unsqueeze(0)
             y = y.unsqueeze(0)
-            loss = criterion(y_pred, y)
-            y_pred = parallel.gather(y_pred, 0)
+            # y_pred = parallel.gather(y_pred, 0)
 
             y_pred = y_pred.squeeze()
             y = y.squeeze()
             y = y.view(-1)
             y_pred = y_pred.view(-1)
 
+            loss = criterion(y_pred, y)
 
             predictions = torch.sigmoid(y_pred).round()
-            accuracy = (y==predictions).cuda().float()
+            accuracy = (y==predictions).to("cuda").float()
             accuracy = accuracy.mean()
             train_running_accuracy += accuracy.item()
             mean_train_acc += accuracy.item()
@@ -153,15 +155,15 @@ def run(args, train, sparse_evidences, claims_dict):
                 # 1. Log scalar values (scalar summary)
                 info = { 'train_loss': train_running_loss/OUTPUT_FREQ, 'train_accuracy': train_running_accuracy/OUTPUT_FREQ }
 
-                #for tag, value in info.items():
-                #    exp.metric(tag, value, log=False)
-                #    logger.scalar_summary(tag, value, train_batch_num+1)
+                for tag, value in info.items():
+                   exp.metric(tag, value, log=False)
+                   logger.scalar_summary(tag, value, train_batch_num+1)
 
                 ## 2. Log values and gradients of the parameters (histogram summary)
-                #for tag, value in model.named_parameters():
-                #    tag = tag.replace('.', '/')
-                #    logger.histo_summary(tag, value.detach().cpu().numpy(), train_batch_num+1)
-                #    logger.histo_summary(tag+'/grad', value.grad.detach().cpu().numpy(), train_batch_num+1)
+                for tag, value in model.named_parameters():
+                   tag = tag.replace('.', '/')
+                   logger.histo_summary(tag, value.detach().cpu().numpy(), train_batch_num+1)
+                   logger.histo_summary(tag+'/grad', value.grad.detach().cpu().numpy(), train_batch_num+1)
 
                 train_running_loss = 0.0
                 beginning_time = time.time() 
@@ -172,9 +174,20 @@ def run(args, train, sparse_evidences, claims_dict):
 
             del loss
             del accuracy
+            del claims_tensors
+            del claims_text
+            del evidences_tensors
+            del evidences_text
+            del labels 
+            del y
+            del y_pred
+            torch.cuda.empty_cache()
+
 
         print("Running validation...")
         model.eval()
+        pred = []
+        true = []
         for val_batch_num, val_inputs in enumerate(val_dataloader):
             claims_tensors, claims_text, evidences_tensors, evidences_text, labels = inputs  
 
@@ -190,21 +203,28 @@ def run(args, train, sparse_evidences, claims_dict):
             y = (labels).float()
             y = y.unsqueeze(0)
             y = y.unsqueeze(0)
-            loss = criterion(y_pred, y)
-            y_pred = parallel.gather(y_pred, 0)
+            # y_pred = parallel.gather(y_pred, 0)
 
             y_pred = y_pred.squeeze()
             y = y.squeeze()
             y = y.view(-1)
             y_pred = y_pred.view(-1)
 
-            predictions = F.sigmoid(y_pred).round()
+            loss = criterion(y_pred, y)
+
+            predictions = torch.sigmoid(y_pred).round()
             accuracy = (y==predictions).to(device)
+
+            true.extend(y.tolist())
+            pred.extend(accuracy.tolist())
+
             accuracy = accuracy.float().mean()
             val_running_accuracy += accuracy.item()
+            val_running_loss += loss.item() 
+
 
             if (val_batch_num % OUTPUT_FREQ)==0 and val_batch_num>0:
-                print("[{}:{}]  accuracy: {}, recall: {}".format(epoch, val_batch_num / (len(val_dataset)/BATCH_SIZE), val_running_accuracy/OUTPUT_FREQ, recall_score(y.detach().cpu().numpy(), predictions.detach().cpu().numpy())))
+                print("[{}:{}]  loss: {}, accuracy: {}, recall: {}".format(epoch, val_batch_num / (len(val_dataset)/BATCH_SIZE), val_running_loss/OUTPUT_FREQ, val_running_accuracy/OUTPUT_FREQ, recall_score(y.detach().cpu().numpy(), predictions.detach().cpu().numpy())))
 
                 # 1. Log scalar values (scalar summary)
                 #info = { 'val_accuracy': val_running_accuracy/OUTPUT_FREQ }
@@ -220,13 +240,31 @@ def run(args, train, sparse_evidences, claims_dict):
                 #    logger.histo_summary(tag+'/grad', value.grad.detach().cpu().numpy(), val_batch_num+1)
 
                 val_running_accuracy = 0.0
+                val_running_loss = 0.0
+
+            del loss
+            del accuracy
+            del claims_tensors
+            del claims_text
+            del evidences_tensors
+            del evidences_text
+            del labels 
+            del y
+            del y_pred
+            torch.cuda.empty_cache()
+
 
         train_acc = torch.tensor((mean_train_acc)/len(train_dataloader), dtype=torch.float)
-        print("[{}] mean accuracy: {}".format(epoch, train_acc))
-        best_accuracy = torch.tensor(max(train_acc.cpu().numpy(), best_accuracy.cpu().numpy()))
-        is_best = bool(train_acc >= best_accuracy)
+        print("[{}] mean accuracy: {}, mean loss: {}".format(epoch, train_acc, val_running_loss / OUTPUT_FREQ))
+
+        true = np.array(true).astype("int") 
+        pred = np.array(pred).astype("int") 
+        print(classification_report(true, pred))
+
+        best_loss = torch.tensor(max(val_running_loss / OUTPUT_FREQ, best_loss.cpu().numpy()))
+        is_best = bool(val_running_loss >= best_loss)
         
-        putils.save_checkpoint({"epoch": epoch, "model": model, "best_accuracy": best_accuracy}, is_best, filename="{}_accuracy_{}".format(model_checkpoint_dir, train_acc.cpu().numpy()))
+        putils.save_checkpoint({"epoch": epoch, "model": model, "best_loss": best_loss}, is_best, filename="{}_accuracy_{}".format(model_checkpoint_dir, train_acc.cpu().numpy()))
 
 if __name__=="__main__":
     args = parse_args()
@@ -249,5 +287,5 @@ if __name__=="__main__":
         print("Loading claims data...")
         claims_dict = joblib.load("claims_dict.pkl")
 
-    torch.multiprocessing.set_start_method("fork", force=True)
+    torch.multiprocessing.set_start_method("spawn", force=True)
     run(args, train, sparse_evidences, claims_dict)
