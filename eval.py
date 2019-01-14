@@ -43,7 +43,7 @@ nltk.data.path.append('/usr/users/mnadeem/nltk_data/')
 def parse_args():
     parser = argparse.ArgumentParser(description='Learning the optimal convolution for network.')
     parser.add_argument("--batch-size", type=int, help="Number of queries per batch.", default=1)
-    parser.add_argument("--data-batch-size", type=int, help="Number of examples per query.", default=8)
+    parser.add_argument("--data-sampling", type=int, help="Number of examples per query.", default=8)
     parser.add_argument("--learning-rate", type=float, help="Learning rate for model.", default=1e-3)
     parser.add_argument("--epochs", type=int, help="Number of epochs to learn for.", default=3)
     parser.add_argument("--data", help="Training dataset to load file from.", default="shared_task_dev.pkl")
@@ -55,7 +55,7 @@ def parse_args():
 def run():
     BATCH_SIZE = args.batch_size
     LEARNING_RATE = args.learning_rate
-    DATA_BATCH_SIZE = args.data_batch_size
+    DATA_SAMPLING = args.data_sampling
     NUM_EPOCHS = args.epochs
     MODEL = args.model
 
@@ -74,13 +74,13 @@ def run():
     model.load_state_dict(torch.load(MODEL))
 
     print("Created dataset...")
-    dataset = pytorch_data_loader.WikiDataset(test, claims_dict, data_batch_size=DATA_BATCH_SIZE, testFile="shared_task_dev.jsonl") 
+    dataset = pytorch_data_loader.WikiDataset(test, claims_dict, data_sampling=DATA_SAMPLING, testFile="shared_task_dev.jsonl") 
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, num_workers=3, shuffle=True, collate_fn=pytorch_data_loader.PadCollate())
 
     OUTPUT_FREQ = int((len(dataset)/BATCH_SIZE)*0.02) 
     criterion = torch.nn.BCEWithLogitsLoss()
 
-    parameters = {"batch size": BATCH_SIZE, "loss": criterion.__class__.__name__, "data batch size": DATA_BATCH_SIZE, "data": args.data}
+    parameters = {"batch size": BATCH_SIZE, "loss": criterion.__class__.__name__, "data batch size": DATA_SAMPLING, "data": args.data}
     exp_params = {}
     exp = Experiment("CLSM V2")
     for key, value in parameters.items():
