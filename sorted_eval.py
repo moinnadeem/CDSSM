@@ -188,7 +188,7 @@ def run():
 
         if batch_num % OUTPUT_FREQ==0 and batch_num>0:
             elapsed_time = time.time() - beginning_time
-            print("[{}:{:3f}s]: accuracy: {}, recall@50: {}".format(batch_num, elapsed_time, test_running_accuracy / OUTPUT_FREQ, test_running_recall_at_ten / OUTPUT_FREQ))
+            print("[{}:{}:{:3f}s]: accuracy: {}, recall@50: {}".format(epoch, batch_num / len(val_dataset), elapsed_time, test_running_accuracy / OUTPUT_FREQ, test_running_recall_at_ten / OUTPUT_FREQ))
             for k, v in recall.items():
                 print("recall@{}: {}".format(k, np.mean(v)))
 
