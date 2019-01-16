@@ -28,7 +28,8 @@ FILTER_LENGTH = 3 # We only consider one time step for convolutions.
 
 
 def kmax_pooling(x, dim, k):
-    index = x.topk(k, dim = dim)[1].sort(dim = dim)[0]
+    index = x.topk(k, dim = dim)[1]
+    index = index.sort(dim = dim)[0]
     return x.gather(dim, index)
 
 class CDSSM(nn.Module):
@@ -63,15 +64,17 @@ class CDSSM(nn.Module):
         torch.nn.init.xavier_uniform_(self.learn_gamma.weight)
 
         # adding batch norm
-        self.q_norm = nn.BatchNorm1d(K)
-        self.doc_norm = nn.BatchNorm1d(K)
+        self.q_norm = nn.BatchNorm1d(WORD_DEPTH)
+        self.doc_norm = nn.BatchNorm1d(WORD_DEPTH)
 
     def forward(self, q, pos):
         # Query model. The paper uses separate neural nets for queries and documents (see section 5.2).
         # To make it compatible with Conv layer we reshape it to: (batch_size, WORD_DEPTH, query_len)
-        print("Query initial shape: {}".format(q.shape))
-        print("Evidence initial shape: {}".format(pos.shape))
+        # print("Query initial shape: {}".format(q.shape))
+        # print("Evidence initial shape: {}".format(pos.shape))
         q = q.transpose(1,2)
+        pos = pos.transpose(1,2)
+        # print("Query reshape: {}".format(q.shape))
 
         # In this step, we transform each word vector with WORD_DEPTH dimensions into its
         # convolved representation with K dimensions. K is the number of kernels/filters
@@ -79,43 +82,41 @@ class CDSSM(nn.Module):
         # of a single weight matrix (W_c) with each of the word vectors (l_t) from the
         # query matrix (l_Q), adding a bias vector (b_c), and then applying the tanh activation.
         # That is, h_Q = tanh(W_c • l_Q + b_c). Note: the paper does not include bias units.
+        q = self.q_norm(q)
+        pos = self.doc_norm(pos)
+
         q_c = torch.tanh(self.query_conv(q))
-        q_c = self.q_norm(q_c)
+        pos_c = torch.tanh(self.doc_conv(pos))
+        # print("Size after convolution: {}".format(q_c.shape))
 
         # Next, we apply a max-pooling layer to the convolved query matrix.
         q_k = kmax_pooling(q_c, 2, 1)
+        pos_k = kmax_pooling(pos_c, 2, 1)
+        # print("Size after max pooling: {}".format(q_k.shape))
         q_k = q_k.transpose(1,2)
+        pos_k = pos_k.transpose(1,2)
+
+        # print("Size after transpose: {}".format(q_k.shape))
         q_k = self.query_dropout(q_k)
+        pos_k = self.document_dropout(pos_k)
 
         # In this step, we generate the semantic vector represenation of the query. This
         # is a standard neural network dense layer, i.e., y = tanh(W_s • v + b_s). Again,
         # the paper does not include bias units.
         q_s = torch.tanh(self.query_sem(q_k))
+        pos_s = torch.tanh(self.doc_sem(pos_k))
+        # print("Semantic layer shape: {}".format(q_s.shape))
+
+        pos_s = pos_s.squeeze()
+        q_s = q_s.squeeze()
 
         #q_s = q_s.resize(L)
-        # # The document equivalent of the above query model for positive document
-        pos = pos.squeeze()
-        pos = pos.transpose(1,2)
-
-        pos_c = torch.tanh(self.doc_conv(pos))
-        pos_c = self.doc_norm(pos_c)
-
-        pos_k = kmax_pooling(pos_c, 2, 1)
-        pos_k = pos_k.transpose(1,2)
-        pos_k = self.document_dropout(pos_k)
-        pos_s = torch.tanh(self.doc_sem(pos_k))
         #pos_s = pos_s.resize(L)
-        # # The document equivalent of the above query model for negative documents
-
+        
         # Now let us calculates the cosine similarity between the semantic representations of
         # a queries and documents
         # dots[0] is the dot-product for positive document, this is necessary to remember
         # because we set the target label accordingly
-
-        q_s = F.tanh(self.query_hidden(q_s))
-        pos_s = self.document_dropout(pos_s)
-        pos_s = pos_s.squeeze()
-
         dots = torch.mm(q_s, pos_s.transpose(0,1)).diag() 
         dots = dots / (torch.norm(q_s)*torch.norm(pos_s))  # divide by the norm to make it cosine distance
 
