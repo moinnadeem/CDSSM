@@ -44,7 +44,7 @@ nltk.data.path.append('/usr/users/mnadeem/nltk_data/')
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Learning the optimal convolution for network.')
-    parser.add_argument("--batch-size", type=int, help="Number of queries per batch.", default=1)
+    parser.add_argument("--batch-size", type=int, help="Number of queries per batch.", default=50)
     parser.add_argument("--data-sampling", type=int, help="Number of examples per query.", default=8)
     parser.add_argument("--learning-rate", type=float, help="Learning rate for model.", default=1e-3)
     parser.add_argument("--epochs", type=int, help="Number of epochs to learn for.", default=3)
@@ -54,7 +54,7 @@ def parse_args():
     parser.add_argument("--sparse-evidences", default=False, action="store_true")
     return parser.parse_args()
 
-@monitor("CLSM Test")
+# @monitor("CLSM Test")
 def run():
     BATCH_SIZE = args.batch_size
     LEARNING_RATE = args.learning_rate
@@ -83,7 +83,7 @@ def run():
     dataset = pytorch_data_loader.ValWikiDataset(test, claims_dict, testFile="shared_task_dev.jsonl", sparse_evidences=sparse_evidences, batch_size=BATCH_SIZE) 
     dataloader = DataLoader(dataset, num_workers=0, collate_fn=pytorch_data_loader.PadCollate())
 
-    OUTPUT_FREQ = int((len(dataset))*0.10) 
+    OUTPUT_FREQ = int((len(dataset))*0.02) 
     
     parameters = {"batch size": BATCH_SIZE, "data sampling rate": DATA_SAMPLING, "data": args.data}
     exp_params = {}
@@ -155,14 +155,20 @@ def run():
 
             for k in recall_intervals:
                 if len(relevant_evidences)==0:
-                    recall[k].append(0)
+                    # recall[k].append(0)
+                    pass
                 else:
                     recall[k].append(calculate_recall(retrieved_evidences, relevant_evidences, k=k))
 
             if len(relevant_evidences)==0:
-                test_running_recall_at_ten += 0.0
+                # test_running_recall_at_ten += 0.0
+                pass
             else:
                 test_running_recall_at_ten += calculate_recall(retrieved_evidences, relevant_evidences, k=50)
+
+
+            # for idx in sorted_idxs: 
+                # print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(prev_claim, all_evidences[idx], all_bin_acc[idx], all_y[idx])) 
 
             # reset tensors
             all_y = y 
@@ -173,10 +179,7 @@ def run():
             all_evidences.extend(evidences_text)
             all_y = torch.cat([all_y, y]) 
         prev_claim = claims_text[0]
-
-        # for idx in range(len(y)):
-          # print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(claims_text[idx], evidences_text[idx], bin_acc[idx], y[idx])) 
-        
+ 
         # compute recall
         # assuming only one claim, this creates a list of all relevant evidences
         y = y.round()
@@ -190,8 +193,9 @@ def run():
 
         if batch_num % OUTPUT_FREQ==0 and batch_num>0:
             elapsed_time = time.time() - beginning_time
-            print("[{}:{}:{:3f}s]: accuracy: {}, recall@50: {}".format(epoch, batch_num / len(val_dataset), elapsed_time, test_running_accuracy / OUTPUT_FREQ, test_running_recall_at_ten / OUTPUT_FREQ))
-            for k, v in recall.items():
+            print("[{}:{:3f}s]: accuracy: {}, recall@50: {}".format(batch_num / len(dataloader), elapsed_time, test_running_accuracy / OUTPUT_FREQ, test_running_recall_at_ten / OUTPUT_FREQ))
+            for k in sorted(recall.keys()):
+                v = recall[k]
                 print("recall@{}: {}".format(k, np.mean(v)))
 
             # 1. Log scalar values (scalar summary)
@@ -210,14 +214,14 @@ def run():
             test_running_recall_at_ten = 0.0
             beginning_time = time.time()
 
-        del claims_tensors
-        del claims_text
-        del evidences_tensors
-        del evidences_text
-        del labels 
-        del y
-        del y_pred
-        torch.cuda.empty_cache()
+        # del claims_tensors
+        # del claims_text
+        # del evidences_tensors
+        # del evidences_text
+        # del labels 
+        # del y
+        # del y_pred
+        # torch.cuda.empty_cache()
 
     final_accuracy = accuracy_score(true, pred)
     print("Final accuracy: {}".format(final_accuracy))
