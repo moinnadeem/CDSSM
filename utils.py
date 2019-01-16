@@ -205,14 +205,14 @@ def parallel_process(array, function, n_jobs=12, use_kwargs=False, front_num=3):
             out.append(e)
     return front + out
 
-def sparsify_evidences(train):
-    # encoder = ClaimEncoder()
+def sparsify_evidences(train, n_jobs=15):
+    encoder = ClaimEncoder()
     evidence_set = []
     for fact in train:
         evidence_set.extend(fact['evidence'])
     evidence_set = list(set(evidence_set))
-
-    result = joblib.Parallel(n_jobs=15, verbose=1)(joblib.delayed(process)(i) for i in evidence_set)
+    print("Total number of evidences: {}".format(len(evidence_set)),80,100,200,250,300,400])
+    result = joblib.Parallel(n_jobs=n_jobs, verbose=1, prefer="threads")(joblib.delayed(process)(evidence=i, encoder=encoder) for i in evidence_set)
     # result = parallel_process(evidence_set, process, n_jobs=15)
     evidences = {}
     for e in result:
@@ -220,7 +220,7 @@ def sparsify_evidences(train):
         evidences[k] = v
     return evidences
 
-def process(evidence):
+def process(evidence, encoder):
     processed = preprocess_article_name(evidence.split("http://wikipedia.org/wiki/")[1])
     evidence = encoder.tokenize_claim(processed)
     if len(evidence)>0:
