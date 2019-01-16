@@ -69,13 +69,15 @@ def run():
     logger = Logger('./logs/{}'.format(time.localtime()))
 
     print("Created model...")
-    model = cdssm.CDSSM()
-    model = model.cuda()
-    model = model.to(device)
+    if MODEL:
+        model = torch.load(MODEL).module
+    else:
+        model = cdssm.CDSSM()
+        model = model.cuda()
+        model = model.to(device)
     if torch.cuda.device_count() > 0:
       print("Let's use", torch.cuda.device_count(), "GPU(s)!")
       model = nn.DataParallel(model)
-    model.load_state_dict(torch.load(MODEL))
 
     print("Created dataset...")
     dataset = pytorch_data_loader.ValWikiDataset(test, claims_dict, testFile="shared_task_dev.jsonl", sparse_evidences=sparse_evidences, batch_size=BATCH_SIZE) 
@@ -95,7 +97,7 @@ def run():
     test_running_accuracy = 0.0
     test_running_recall_at_ten = 0.0
 
-    recall_intervals = [1,2,5,10,20,40,60,80,100,200,250,300,400]
+    recall_intervals = [1,2,5,10,20,30,40,50]
     recall = {}
     for i in recall_intervals:
         recall[i] = []
@@ -172,8 +174,8 @@ def run():
             all_y = torch.cat([all_y, y]) 
         prev_claim = claims_text[0]
 
-        for idx in range(len(y)):
-          print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(claims_text[idx], evidences_text[idx], bin_acc[idx], y[idx])) 
+        # for idx in range(len(y)):
+          # print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(claims_text[idx], evidences_text[idx], bin_acc[idx], y[idx])) 
         
         # compute recall
         # assuming only one claim, this creates a list of all relevant evidences

@@ -82,10 +82,10 @@ def run(args, train, sparse_evidences, claims_dict):
     train_size = int(len(train) * 0.8)
     #test = int(len(train) * 0.5)
     train_dataset = pytorch_data_loader.WikiDataset(train[:train_size], claims_dict, data_sampling=DATA_SAMPLING, sparse_evidences=sparse_evidences, randomize=RANDOMIZE) 
-    val_dataset = pytorch_data_loader.WikiDataset(train[train_size:], claims_dict, batch_size=DATA_SAMPLING*BATCH_SIZE, sparse_evidences=sparse_evidences) 
+    val_dataset = pytorch_data_loader.WikiDataset(train[train_size:], claims_dict, batch_size=DATA_SAMPLING, sparse_evidences=sparse_evidences) 
 
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=0, shuffle=True, collate_fn=pytorch_data_loader.PadCollate())
-    val_dataloader = DataLoader(val_dataset, batch_size=1, num_workers=0, shuffle=False, collate_fn=pytorch_data_loader.PadCollate())
+    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=0, shuffle=False, collate_fn=pytorch_data_loader.PadCollate())
 
     # Loss and optimizer
     criterion = torch.nn.BCEWithLogitsLoss()
@@ -175,16 +175,16 @@ def run(args, train, sparse_evidences, claims_dict):
             loss.backward()
             optimizer.step()
 
-            # del loss
-            # del accuracy
-            # del claims_tensors
-            # del claims_text
-            # del evidences_tensors
-            # del evidences_text
-            # del labels 
-            # del y
-            # del y_pred
-            # torch.cuda.empty_cache()
+        del loss
+        del accuracy
+        del claims_tensors
+        del claims_text
+        del evidences_tensors
+        del evidences_text
+        del labels 
+        del y
+        del y_pred
+        torch.cuda.empty_cache()
 
 
         print("Running validation...")
@@ -192,6 +192,7 @@ def run(args, train, sparse_evidences, claims_dict):
         pred = []
         true = []
         for val_batch_num, val_inputs in enumerate(val_dataloader):
+            beginning_time = time.time()
             claims_tensors, claims_text, evidences_tensors, evidences_text, labels = inputs  
 
             claims_tensors = claims_tensors.cuda()
@@ -224,7 +225,8 @@ def run(args, train, sparse_evidences, claims_dict):
 
 
             if (val_batch_num % OUTPUT_FREQ)==0 and val_batch_num>0:
-                print("[{}:{}] validation loss: {}, accuracy: {}, recall: {}".format(epoch, val_batch_num / (len(val_dataset)/BATCH_SIZE), val_running_loss/OUTPUT_FREQ, val_running_accuracy/OUTPUT_FREQ, recall_score(y.detach().cpu().numpy(), predictions.detach().cpu().numpy())))
+                elapsed_time = time.time() - beginning_time
+                print("[{}:{}:{:3f}s] validation loss: {}, accuracy: {}, recall: {}".format(epoch, val_batch_num / (len(val_dataset)/BATCH_SIZE), elapsed_time, val_running_loss/OUTPUT_FREQ, val_running_accuracy/OUTPUT_FREQ, recall_score(y.detach().cpu().numpy(), predictions.detach().cpu().numpy())))
 
                 # 1. Log scalar values (scalar summary)
                 #info = { 'val_accuracy': val_running_accuracy/OUTPUT_FREQ }
@@ -242,16 +244,16 @@ def run(args, train, sparse_evidences, claims_dict):
                 val_running_accuracy = 0.0
                 val_running_loss = 0.0
 
-            # del loss
-            # del accuracy
-            # del claims_tensors
-            # del claims_text
-            # del evidences_tensors
-            # del evidences_text
-            # del labels 
-            # del y
-            # del y_pred
-            # torch.cuda.empty_cache()
+        del loss
+        del accuracy
+        del claims_tensors
+        del claims_text
+        del evidences_tensors
+        del evidences_text
+        del labels 
+        del y
+        del y_pred
+        torch.cuda.empty_cache()
 
 
         train_acc = torch.tensor((mean_train_acc)/len(train_dataloader), dtype=torch.float)
