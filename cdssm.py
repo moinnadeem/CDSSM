@@ -119,7 +119,7 @@ class CDSSM(nn.Module):
         pos_s = pos_s.squeeze()
 
         dots = torch.mm(q_s, pos_s.transpose(0,1)).diag() 
-        dots = dots / torch.norm(dots)
+        dots = dots / (torch.norm(q_s)*torch.norm(pos_s))  # divide by the norm to make it cosine distance
 
         # dots is a list as of now, lets convert it to torch variable
         #dots = torch.stack(dots)
