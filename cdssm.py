@@ -119,6 +119,7 @@ class CDSSM(nn.Module):
         pos_s = pos_s.squeeze()
 
         dots = torch.mm(q_s, pos_s.transpose(0,1)).diag() 
+        dots = dots / torch.norm(dots)
 
         # dots is a list as of now, lets convert it to torch variable
         #dots = torch.stack(dots)
