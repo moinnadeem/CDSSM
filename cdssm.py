@@ -69,6 +69,8 @@ class CDSSM(nn.Module):
     def forward(self, q, pos):
         # Query model. The paper uses separate neural nets for queries and documents (see section 5.2).
         # To make it compatible with Conv layer we reshape it to: (batch_size, WORD_DEPTH, query_len)
+        print("Query initial shape: {}".format(q.shape))
+        print("Evidence initial shape: {}".format(pos.shape))
         q = q.transpose(1,2)
 
         # In this step, we transform each word vector with WORD_DEPTH dimensions into its
@@ -111,11 +113,7 @@ class CDSSM(nn.Module):
         # because we set the target label accordingly
 
         q_s = F.tanh(self.query_hidden(q_s))
-        pos_s = F.tanh(self.document_hidden(pos_s))
-        q_s = self.query_dropout(q_s)
         pos_s = self.document_dropout(pos_s)
-        
-        q_s = q_s.squeeze()
         pos_s = pos_s.squeeze()
 
         dots = torch.mm(q_s, pos_s.transpose(0,1)).diag() 

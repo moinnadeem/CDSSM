@@ -155,14 +155,14 @@ def run():
 
             for k in recall_intervals:
                 if len(relevant_evidences)==0:
-                    # recall[k].append(0)
-                    pass
+                    recall[k].append(0)
+                    # pass
                 else:
                     recall[k].append(calculate_recall(retrieved_evidences, relevant_evidences, k=k))
 
             if len(relevant_evidences)==0:
-                # test_running_recall_at_ten += 0.0
-                pass
+                test_running_recall_at_ten += 0.0
+                # pass
             else:
                 test_running_recall_at_ten += calculate_recall(retrieved_evidences, relevant_evidences, k=50)
 
