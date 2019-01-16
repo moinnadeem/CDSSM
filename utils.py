@@ -205,23 +205,31 @@ def parallel_process(array, function, n_jobs=12, use_kwargs=False, front_num=3):
             out.append(e)
     return front + out
 
-def sparsify_evidences(train, n_jobs=15):
+def sparsify_evidences(train, n_jobs=15, jsonl_file="train.jsonl"):
     encoder = ClaimEncoder()
     evidence_set = []
     for fact in train:
         evidence_set.extend(fact['evidence'])
+    _, _, _, _, claim_to_article = extract_fever_jsonl_data(jsonl_file)
+    flattened_claims = [item for sublist in (list(claim_to_article.values())) for item in sublist]
+    evidence_set.extend(flattened_claims)
     evidence_set = list(set(evidence_set))
-    print("Total number of evidences: {}".format(len(evidence_set)),80,100,200,250,300,400])
+    print("Total number of evidences: {}".format(len(evidence_set)))
     result = joblib.Parallel(n_jobs=n_jobs, verbose=1, prefer="threads")(joblib.delayed(process)(evidence=i, encoder=encoder) for i in evidence_set)
     # result = parallel_process(evidence_set, process, n_jobs=15)
     evidences = {}
     for e in result:
-        k, v = e
-        evidences[k] = v
+        if e is not None:
+            k, v = e
+            evidences[k] = v
+
     return evidences
 
 def process(evidence, encoder):
-    processed = preprocess_article_name(evidence.split("http://wikipedia.org/wiki/")[1])
+    if "http://wikipedia" in evidence:
+        processed = preprocess_article_name(evidence.split("http://wikipedia.org/wiki/")[1])
+    else:
+        processed = preprocess_article_name(evidence)
     evidence = encoder.tokenize_claim(processed)
     if len(evidence)>0:
         evidence = sparse.vstack(evidence)
