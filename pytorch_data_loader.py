@@ -310,14 +310,14 @@ class ValWikiDataset(Dataset):
         _, _, _, _, self.claim_to_article = utils.extract_fever_jsonl_data(testFile)
 
     def __len__(self):
-        return (len(self.data)*400)//self.batch_size
+        return (len(self.data)*50)//self.batch_size
 
     def __getitem__(self, index):
         return self.get_item(index)
 
     def get_item(self, index):
-        claim_index = (index*self.batch_size)//400
-        evidences_idx = (index*self.batch_size)%400
+        claim_index = (index*self.batch_size)//50
+        evidences_idx = (index*self.batch_size)%50
 
         d = self.data[claim_index]
         claim = self.claims_dict[d['claim']]
