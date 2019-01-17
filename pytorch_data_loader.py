@@ -67,7 +67,7 @@ def pad_tensor(vec, pad, dim):
     else:
         zeros_tensor = torch.FloatTensor(*pad_size)
 
-    return torch.cat([vec, zeros_tensor], dim=dim).cuda()
+    return torch.cat([vec, zeros_tensor], dim=dim)
 
 class PadCollate:
     """
@@ -112,14 +112,11 @@ class PadCollate:
             max_len = max(map(lambda x: x.shape[self.dim], tensor))
 
             # pad according to max_len
-            #batched_items.append(list(map(lambda x: pad_tensor(x, pad=max_len, dim=self.dim), tensor)))
-            batched_items.append([pad_tensor(x, pad=max_len, dim=self.dim) for x in tensor])
+            batched_items.append(list(map(lambda x: pad_tensor(x, pad=max_len, dim=self.dim), tensor)))
 
         # stack all
-        claims_tensors = torch.stack(batched_items[0], dim=0)
-        claims_tensors = claims_tensors.cuda()
-        evidences_tensors = torch.stack(batched_items[1], dim=0)
-        evidences_tensors = evidences_tensors.cuda()
+        claims_tensors = torch.stack(batched_items[0], dim=0).cuda()
+        evidences_tensors = torch.stack(batched_items[1], dim=0).cuda()
         labels = torch.tensor(labels, dtype=torch.float).cuda()
         return [claims_tensors, claims_text, evidences_tensors, evidences_text, labels] 
 
@@ -170,8 +167,7 @@ class WikiDataset(Dataset):
         #claim = sparse.vstack(claim).toarray()  # turn it into a array
         claim = self.claims_dict[d['claim']]
         claim = claim.toarray()
-        claim = torch.Tensor(claim)
-        claim = claim.cuda()
+        claim = torch.Tensor(claim).cuda()
         claim_text = d['claim']
         #claim = sparse.vstack(self.encoder.tokenize_claim(utils.preprocess_article_name(d['claim']))).toarray()
 
@@ -196,8 +192,7 @@ class WikiDataset(Dataset):
                 evidence = sparse.vstack(evidence)
 
             evidence = evidence.toarray()
-            evidence = torch.Tensor(evidence) 
-            evidence = evidence.cuda()
+            evidence = torch.Tensor(evidence).cuda()
 
             evidence_text.append(processed)
             evidence_tensors.append(evidence)
@@ -233,8 +228,7 @@ class WikiDataset(Dataset):
 
             if evidence.shape[0]>0:
                 evidence = evidence.toarray()
-                evidence = torch.Tensor(evidence)
-                evidence = evidence.cuda()
+                evidence = torch.Tensor(evidence).cuda()
                 evidence_tensors.append(evidence)
                 evidence_text.append(processed)
 
@@ -250,7 +244,6 @@ class WikiDataset(Dataset):
                 raise Exception("SKipping append")
 
         #claim = claim.expand(evidences.shape[0], claim.shape[0], claim.shape[1])
-        #labels = torch.Tensor(labels).cuda()
         return claims_tensors, claims_text, evidence_tensors, evidence_text, labels 
 
     def on_epoch_end(self):
