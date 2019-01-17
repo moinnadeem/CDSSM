@@ -45,11 +45,11 @@ class CDSSM(nn.Module):
         torch.nn.init.xavier_uniform_(self.query_sem.weight)
 
         # adding a hidden layer
-        self.query_hidden = nn.Linear(L, L//2)
-        self.document_hidden = nn.Linear(L, L//2)
+        # self.query_hidden = nn.Linear(L, L//2)
+        # self.document_hidden = nn.Linear(L, L//2)
 
         # dropout for regularization
-        print("Model with dropout and tanh.")
+        print("Model with dropout and tanh, BN before Conv.")
         self.query_dropout = nn.Dropout(0.2)
         self.document_dropout = nn.Dropout(0.2)
 
@@ -64,8 +64,8 @@ class CDSSM(nn.Module):
         torch.nn.init.xavier_uniform_(self.learn_gamma.weight)
 
         # adding batch norm
-        self.q_norm = nn.BatchNorm1d(WORD_DEPTH)
-        self.doc_norm = nn.BatchNorm1d(WORD_DEPTH)
+        self.q_norm = nn.BatchNorm1d(K)
+        self.doc_norm = nn.BatchNorm1d(K)
 
     def forward(self, q, pos):
         # Query model. The paper uses separate neural nets for queries and documents (see section 5.2).
@@ -82,11 +82,12 @@ class CDSSM(nn.Module):
         # of a single weight matrix (W_c) with each of the word vectors (l_t) from the
         # query matrix (l_Q), adding a bias vector (b_c), and then applying the tanh activation.
         # That is, h_Q = tanh(W_c • l_Q + b_c). Note: the paper does not include bias units.
-        q = self.q_norm(q)
-        pos = self.doc_norm(pos)
 
         q_c = torch.tanh(self.query_conv(q))
         pos_c = torch.tanh(self.doc_conv(pos))
+
+        q = self.q_norm(q)
+        pos = self.doc_norm(pos)
         # print("Size after convolution: {}".format(q_c.shape))
 
         # Next, we apply a max-pooling layer to the convolved query matrix.

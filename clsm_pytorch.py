@@ -30,7 +30,7 @@ from hyperdash import Experiment, monitor
 from joblib import Parallel, delayed
 from scipy import sparse
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
-from sklearn.metrics import recall_score, classification_report
+from sklearn.metrics import recall_score, classification_report, accuracy_score
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from tqdm import tqdm, tqdm_notebook
@@ -68,24 +68,26 @@ def run(args, train, sparse_evidences, claims_dict):
 
     logger = Logger('./logs/{}'.format(time.localtime()))
 
-    model = cdssm.CDSSM()
-    model = model.to(device)
+    if MODEL:
+        model = torch.load(MODEL).module
+    else:
+        model = cdssm.CDSSM()
+        model = model.cuda()
+        model = model.to(device)
+
     if torch.cuda.device_count() > 0:
       print("Let's use", torch.cuda.device_count(), "GPU(s)!")
       model = nn.DataParallel(model)
     print("Created model with {:,} parameters.".format(putils.count_parameters(model)))
 
-    if MODEL:
-      model = torch.load(MODEL)
-
     print("Created dataset...")
     train_size = int(len(train) * 0.8)
     #test = int(len(train) * 0.5)
     train_dataset = pytorch_data_loader.WikiDataset(train[:train_size], claims_dict, data_sampling=DATA_SAMPLING, sparse_evidences=sparse_evidences, randomize=RANDOMIZE) 
-    val_dataset = pytorch_data_loader.WikiDataset(train[train_size:], claims_dict, batch_size=DATA_SAMPLING, sparse_evidences=sparse_evidences) 
+    val_dataset = pytorch_data_loader.WikiDataset(train[train_size:], claims_dict, data_sampling=DATA_SAMPLING, sparse_evidences=sparse_evidences, randomize=RANDOMIZE) 
 
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=0, shuffle=True, collate_fn=pytorch_data_loader.PadCollate())
-    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=0, shuffle=False, collate_fn=pytorch_data_loader.PadCollate())
+    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=0, shuffle=True, collate_fn=pytorch_data_loader.PadCollate())
 
     # Loss and optimizer
     criterion = torch.nn.BCEWithLogitsLoss()
@@ -164,9 +166,9 @@ def run(args, train, sparse_evidences, claims_dict):
 
                 ## 2. Log values and gradients of the parameters (histogram summary)
                 for tag, value in model.named_parameters():
-                   tag = tag.replace('.', '/')
-                   logger.histo_summary(tag, value.detach().cpu().numpy(), train_batch_num+1)
-                   logger.histo_summary(tag+'/grad', value.grad.detach().cpu().numpy(), train_batch_num+1)
+                    tag = tag.replace('.', '/')
+                    logger.histo_summary(tag, value.detach().cpu().numpy(), train_batch_num+1)
+                    logger.histo_summary(tag+'/grad', value.grad.detach().cpu().numpy(), train_batch_num+1)
 
                 train_running_loss = 0.0
                 beginning_time = time.time() 
@@ -191,9 +193,10 @@ def run(args, train, sparse_evidences, claims_dict):
         model.eval()
         pred = []
         true = []
+        avg_loss = 0.0
+        beginning_time = time.time()
         for val_batch_num, val_inputs in enumerate(val_dataloader):
-            beginning_time = time.time()
-            claims_tensors, claims_text, evidences_tensors, evidences_text, labels = inputs  
+            claims_tensors, claims_text, evidences_tensors, evidences_text, labels = val_inputs  
 
             claims_tensors = claims_tensors.cuda()
             evidences_tensors = evidences_tensors.cuda()
@@ -222,7 +225,7 @@ def run(args, train, sparse_evidences, claims_dict):
             accuracy = accuracy.float().mean()
             val_running_accuracy += accuracy.item()
             val_running_loss += loss.item() 
-
+            avg_loss += loss.item()
 
             if (val_batch_num % OUTPUT_FREQ)==0 and val_batch_num>0:
                 elapsed_time = time.time() - beginning_time
@@ -243,6 +246,7 @@ def run(args, train, sparse_evidences, claims_dict):
 
                 val_running_accuracy = 0.0
                 val_running_loss = 0.0
+                beginning_time = time.time()
 
         del loss
         del accuracy
@@ -255,18 +259,17 @@ def run(args, train, sparse_evidences, claims_dict):
         del y_pred
         torch.cuda.empty_cache()
 
-
-        train_acc = torch.tensor((mean_train_acc)/len(train_dataloader), dtype=torch.float)
-        print("[{}] mean accuracy: {}, mean loss: {}".format(epoch, train_acc, val_running_loss / OUTPUT_FREQ))
+        accuracy = accuracy_score(true, pred) 
+        print("[{}] mean accuracy: {}, mean loss: {}".format(epoch, accuracy, avg_loss / len(val_dataloader)))
 
         true = np.array(true).astype("int") 
         pred = np.array(pred).astype("int") 
         print(classification_report(true, pred))
 
-        best_loss = torch.tensor(max(val_running_loss / OUTPUT_FREQ, best_loss.cpu().numpy()))
-        is_best = bool(val_running_loss >= best_loss)
+        best_loss = torch.tensor(max(avg_loss / len(val_dataloader), best_loss.cpu().numpy()))
+        is_best = bool((avg_loss / len(val_dataloader)) >= best_loss)
         
-        putils.save_checkpoint({"epoch": epoch, "model": model, "best_loss": best_loss}, is_best, filename="{}_accuracy_{}".format(model_checkpoint_dir, train_acc.cpu().numpy()))
+        putils.save_checkpoint({"epoch": epoch, "model": model, "best_loss": best_loss}, is_best, filename="{}_accuracy_{}".format(model_checkpoint_dir, accuracy))
 
 if __name__=="__main__":
     args = parse_args()

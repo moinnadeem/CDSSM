@@ -167,8 +167,8 @@ def run():
                 test_running_recall_at_ten += calculate_recall(retrieved_evidences, relevant_evidences, k=50)
 
 
-            # for idx in sorted_idxs: 
-                # print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(prev_claim, all_evidences[idx], all_bin_acc[idx], all_y[idx])) 
+            for idx in sorted_idxs: 
+                print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(prev_claim, all_evidences[idx], all_bin_acc[idx], all_y[idx])) 
 
             # reset tensors
             all_y = y 
