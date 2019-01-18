@@ -39,23 +39,29 @@ class CDSSM(nn.Module):
         self.query_conv = nn.Conv1d(WORD_DEPTH, K, FILTER_LENGTH)
         # adding Xavier-He initialization
         torch.nn.init.xavier_uniform_(self.query_conv.weight)
+        
+        # self.second_query_conv = nn.Conv1d(K, K, FILTER_LENGTH)
+        # torch.nn.init.xavier_uniform_(self.second_query_conv.weight)
 
         # learn the semantic representation
         self.query_sem = nn.Linear(K, L)
         torch.nn.init.xavier_uniform_(self.query_sem.weight)
 
         # adding a hidden layer
-        # self.query_hidden = nn.Linear(L, L//2)
-        # self.document_hidden = nn.Linear(L, L//2)
+        self.second_query_sem = nn.Linear(L, L)
+        self.second_doc_sem = nn.Linear(L, L)
 
         # dropout for regularization
-        print("Model with dropout and tanh, BN before Conv.")
-        self.query_dropout = nn.Dropout(0.2)
-        self.document_dropout = nn.Dropout(0.2)
+        self.query_dropout = nn.Dropout(0.4)
+        self.document_dropout = nn.Dropout(0.4)
 
         # layers for docs
         self.doc_conv = nn.Conv1d(WORD_DEPTH, K, FILTER_LENGTH)
         torch.nn.init.xavier_uniform_(self.doc_conv.weight)
+
+        # self.second_doc_conv = nn.Conv1d(K, K, FILTER_LENGTH)
+        # torch.nn.init.xavier_uniform_(self.second_doc_conv.weight)
+
         self.doc_sem = nn.Linear(K, L)
         torch.nn.init.xavier_uniform_(self.doc_sem.weight)
 
@@ -66,6 +72,10 @@ class CDSSM(nn.Module):
         # adding batch norm
         self.q_norm = nn.BatchNorm1d(K)
         self.doc_norm = nn.BatchNorm1d(K)
+        
+        # adding q_norm
+        self.sem_q_norm = nn.BatchNorm1d(1)
+        self.sem_doc_norm = nn.BatchNorm1d(1)
 
     def forward(self, q, pos):
         # Query model. The paper uses separate neural nets for queries and documents (see section 5.2).
@@ -86,14 +96,22 @@ class CDSSM(nn.Module):
         q_c = torch.tanh(self.query_conv(q))
         pos_c = torch.tanh(self.doc_conv(pos))
 
-        q = self.q_norm(q)
-        pos = self.doc_norm(pos)
+        q_c = self.q_norm(q_c)
+        pos_c = self.doc_norm(pos_c)
         # print("Size after convolution: {}".format(q_c.shape))
 
         # Next, we apply a max-pooling layer to the convolved query matrix.
         q_k = kmax_pooling(q_c, 2, 1)
         pos_k = kmax_pooling(pos_c, 2, 1)
+
         # print("Size after max pooling: {}".format(q_k.shape))
+
+        # q_k = torch.tanh(self.second_query_conv(q_k))
+        # pos_k = torch.tanh(self.second_doc_conv(pos_k))
+
+        q_k = kmax_pooling(q_k, 2, 1)
+        pos_k = kmax_pooling(pos_k, 2, 1)
+
         q_k = q_k.transpose(1,2)
         pos_k = pos_k.transpose(1,2)
 
@@ -104,8 +122,14 @@ class CDSSM(nn.Module):
         # In this step, we generate the semantic vector represenation of the query. This
         # is a standard neural network dense layer, i.e., y = tanh(W_s • v + b_s). Again,
         # the paper does not include bias units.
+        q_k = self.sem_q_norm(q_k)
+        pos_k = self.sem_doc_norm(pos_k)
+
         q_s = torch.tanh(self.query_sem(q_k))
         pos_s = torch.tanh(self.doc_sem(pos_k))
+
+        q_s = torch.tanh(self.second_query_sem(q_s))
+        pos_s = torch.tanh(self.second_doc_sem(pos_s))
         # print("Semantic layer shape: {}".format(q_s.shape))
 
         pos_s = pos_s.squeeze()
