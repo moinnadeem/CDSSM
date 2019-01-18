@@ -68,17 +68,26 @@ def run(args, train, sparse_evidences, claims_dict):
 
     logger = Logger('./logs/{}'.format(time.localtime()))
 
-    if MODEL:
-        model = torch.load(MODEL).module
-    else:
-        model = cdssm.CDSSM()
-        model = model.cuda()
-        model = model.to(device)
+    # if MODEL:
+        # print("TEMPORARY change to loading!")
+        # model = torch.load(MODEL, strict=False).module
+    # else:
+        # model = cdssm.CDSSM()
+        # model = model.cuda()
+        # model = model.to(device)
+
+    model = cdssm.CDSSM()
+    model = model.cuda()
+    model = model.to(device)
 
     if torch.cuda.device_count() > 0:
       print("Let's use", torch.cuda.device_count(), "GPU(s)!")
       model = nn.DataParallel(model)
     print("Created model with {:,} parameters.".format(putils.count_parameters(model)))
+
+    if MODEL:
+        print("TEMPORARY change to loading!")
+        model.load_state_dict(torch.load(MODEL).state_dict(), strict=False)
 
     print("Created dataset...")
     train_size = int(len(train) * 0.8)
@@ -104,7 +113,6 @@ def run(args, train, sparse_evidences, claims_dict):
     model_checkpoint_dir = "models/saved_model" 
     for key, value in parameters.items():
         exp_params[key] = exp.param(key, value) 
-
         if type(value)==str:
             value = value.replace("/", "-")
         model_checkpoint_dir += "_{}-{}".format(key.replace(" ", "_"), value)
@@ -152,6 +160,10 @@ def run(args, train, sparse_evidences, claims_dict):
             train_running_accuracy += accuracy.item()
             mean_train_acc += accuracy.item()
             train_running_loss += loss.item()
+
+
+            # for idx in range(len(y)): 
+                # print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(claims_text[0], evidences_text[idx], torch.sigmoid(y_pred[idx]), y[idx])) 
 
             if (train_batch_num % OUTPUT_FREQ)==0 and train_batch_num>0:
                 elapsed_time = time.time() - beginning_time
@@ -267,9 +279,9 @@ def run(args, train, sparse_evidences, claims_dict):
         print(classification_report(true, pred))
 
         best_loss = torch.tensor(max(avg_loss / len(val_dataloader), best_loss.cpu().numpy()))
-        is_best = bool((avg_loss / len(val_dataloader)) >= best_loss)
+        is_best = bool((avg_loss / len(val_dataloader)) <= best_loss)
         
-        putils.save_checkpoint({"epoch": epoch, "model": model, "best_loss": best_loss}, is_best, filename="{}_accuracy_{}".format(model_checkpoint_dir, accuracy))
+        putils.save_checkpoint({"epoch": epoch, "model": model, "best_loss": best_loss}, is_best, filename="{}_loss_{}".format(model_checkpoint_dir, best_loss.cpu().numpy()))
 
 if __name__=="__main__":
     args = parse_args()
