@@ -45,20 +45,19 @@ nltk.data.path.append('/usr/users/mnadeem/nltk_data/')
 def parse_args():
     parser = argparse.ArgumentParser(description='Learning the optimal convolution for network.')
     parser.add_argument("--batch-size", type=int, help="Number of queries per batch.", default=50)
-    parser.add_argument("--data-sampling", type=int, help="Number of examples per query.", default=8)
     parser.add_argument("--learning-rate", type=float, help="Learning rate for model.", default=1e-3)
     parser.add_argument("--epochs", type=int, help="Number of epochs to learn for.", default=3)
     parser.add_argument("--randomize", default=False, action="store_true")
     parser.add_argument("--data", help="Training dataset to load file from.", default="data/validation")
     parser.add_argument("--model", help="Model to evaluate.") 
     parser.add_argument("--sparse-evidences", default=False, action="store_true")
+    parser.add_argument("--print", default=False, action="store_true", help="Whether to print predicted labels or not.")
     return parser.parse_args()
 
 # @monitor("CLSM Test")
 def run():
     BATCH_SIZE = args.batch_size
     LEARNING_RATE = args.learning_rate
-    DATA_SAMPLING = args.data_sampling
     NUM_EPOCHS = args.epochs
     MODEL = args.model
     RANDOMIZE = args.randomize
@@ -85,7 +84,7 @@ def run():
 
     OUTPUT_FREQ = int((len(dataset))*0.02) 
     
-    parameters = {"batch size": BATCH_SIZE, "data sampling rate": DATA_SAMPLING, "data": args.data}
+    parameters = {"batch size": BATCH_SIZE, "data": args.data}
     exp_params = {}
     exp = Experiment("CLSM V2")
     for key, value in parameters.items():
@@ -123,11 +122,8 @@ def run():
         y_pred = y_pred.squeeze()
         y = y.squeeze()
 
-        # flatten tensors
-        y = y.view(-1)
-        y_pred = y_pred.view(-1)
-
         bin_acc = torch.sigmoid(y_pred).to("cuda")
+        # bin_acc = y_pred
 
         if prev_claim is None:
             all_y = y 
@@ -167,8 +163,9 @@ def run():
                 test_running_recall_at_ten += calculate_recall(retrieved_evidences, relevant_evidences, k=50)
 
 
-            for idx in sorted_idxs: 
-                print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(prev_claim, all_evidences[idx], all_bin_acc[idx], all_y[idx])) 
+            if args.print:	
+                for idx in sorted_idxs: 
+                    print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(prev_claim, all_evidences[idx], all_bin_acc[idx], all_y[idx])) 
 
             # reset tensors
             all_y = y 
@@ -200,6 +197,10 @@ def run():
 
             # 1. Log scalar values (scalar summary)
             info = { 'test_accuracy': test_running_accuracy/OUTPUT_FREQ }
+
+            true = [int(i) for i in true]
+            pred = [int(i) for i in pred]
+            print(classification_report(true, pred))
 
             for tag, value in info.items():
                 exp.metric(tag, value, log=False)
