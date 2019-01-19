@@ -44,7 +44,7 @@ nltk.data.path.append('/usr/users/mnadeem/nltk_data/')
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Learning the optimal convolution for network.')
-    parser.add_argument("--batch-size", type=int, help="Number of queries per batch.", default=50)
+    parser.add_argument("--batch-size", type=int, help="Number of queries per batch.", default=20)
     parser.add_argument("--learning-rate", type=float, help="Learning rate for model.", default=1e-3)
     parser.add_argument("--epochs", type=int, help="Number of epochs to learn for.", default=3)
     parser.add_argument("--randomize", default=False, action="store_true")
@@ -80,7 +80,7 @@ def run():
 
     print("Created dataset...")
     dataset = pytorch_data_loader.ValWikiDataset(test, claims_dict, testFile="shared_task_dev.jsonl", sparse_evidences=sparse_evidences, batch_size=BATCH_SIZE) 
-    dataloader = DataLoader(dataset, num_workers=0, collate_fn=pytorch_data_loader.PadCollate())
+    dataloader = DataLoader(dataset, num_workers=0, collate_fn=pytorch_data_loader.PadCollate(), shuffle=False)
 
     OUTPUT_FREQ = int((len(dataset))*0.02) 
     
@@ -96,7 +96,7 @@ def run():
     test_running_accuracy = 0.0
     test_running_recall_at_ten = 0.0
 
-    recall_intervals = [1,2,5,10,20,30,40,50]
+    recall_intervals = [1,2,5,10,20]
     recall = {}
     for i in recall_intervals:
         recall[i] = []
@@ -120,9 +120,12 @@ def run():
         y = (labels).float()
 
         y_pred = y_pred.squeeze()
-        y = y.squeeze()
 
-        bin_acc = torch.sigmoid(y_pred).to("cuda")
+        binary_y = torch.max(y, 1)[1]
+        binary_y_pred = torch.max(y_pred, 1)[1]
+        accuracy = (binary_y==binary_y_pred).to(device)
+        bin_acc = y_pred[:,1]
+        accuracy = accuracy.float().mean()
         # bin_acc = y_pred
 
         if prev_claim is None:
@@ -136,7 +139,7 @@ def run():
             relevant_evidences = []
             for idx in range(all_y.shape[0]):
                 try:
-                    if int(all_y[idx]):
+                    if int(all_y[idx][1]):
                         relevant_evidences.append(all_evidences[idx])
                 except Exception as e:
                     print(all_y, all_y[idx], idx)
@@ -151,21 +154,21 @@ def run():
 
             for k in recall_intervals:
                 if len(relevant_evidences)==0:
-                    recall[k].append(0)
-                    # pass
+                    # recall[k].append(0)
+                    pass
                 else:
                     recall[k].append(calculate_recall(retrieved_evidences, relevant_evidences, k=k))
 
             if len(relevant_evidences)==0:
-                test_running_recall_at_ten += 0.0
-                # pass
+                #test_running_recall_at_ten += 0.0
+                pass
             else:
                 test_running_recall_at_ten += calculate_recall(retrieved_evidences, relevant_evidences, k=50)
 
 
-            if args.print:	
+            if args.print:      
                 for idx in sorted_idxs: 
-                    print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(prev_claim, all_evidences[idx], all_bin_acc[idx], all_y[idx])) 
+                    print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(prev_claim, all_evidences[idx], torch.exp(all_bin_acc[idx]), all_y[idx])) 
 
             # reset tensors
             all_y = y 
@@ -179,13 +182,9 @@ def run():
  
         # compute recall
         # assuming only one claim, this creates a list of all relevant evidences
-        y = y.round()
-        bin_acc = bin_acc.round()
-        true.extend(y.tolist())
-        pred.extend(bin_acc.tolist())
+        true.extend(binary_y.tolist())
+        pred.extend(binary_y_pred.tolist())
 
-        accuracy = (y==bin_acc)
-        accuracy = accuracy.float().mean()
         test_running_accuracy += accuracy.item()
 
         if batch_num % OUTPUT_FREQ==0 and batch_num>0:
@@ -224,10 +223,10 @@ def run():
         # del y_pred
         # torch.cuda.empty_cache()
 
-    final_accuracy = accuracy_score(true, pred)
-    print("Final accuracy: {}".format(final_accuracy))
     true = [int(i) for i in true]
     pred = [int(i) for i in pred]
+    final_accuracy = accuracy_score(true, pred)
+    print("Final accuracy: {}".format(final_accuracy))
     print(classification_report(true, pred))
 
     for k, v in recall.items():
@@ -283,15 +282,6 @@ if __name__=="__main__":
     except:
         print("Loading validation claims data...")
         claims_dict = joblib.load("claims_dict.pkl")
-
-    test[2576]['evidence'] = test[0]['evidence']
-    test[4176]['evidence'] = test[0]['evidence']
-    test[4936]['evidence'] = test[0]['evidence']
-    test[9835]['evidence'] = test[0]['evidence']
-    test[10857]['evidence'] = test[0]['evidence']
-    test[12177]['evidence'] = test[0]['evidence']
-    test[12478]['evidence'] = test[0]['evidence']
-    test[14404]['evidence'] = test[0]['evidence']
 
     torch.multiprocessing.set_start_method("spawn", force=True)
     run()
