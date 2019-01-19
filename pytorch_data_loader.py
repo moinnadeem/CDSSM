@@ -60,15 +60,15 @@ def pad_tensor(vec, pad, dim):
     return:
         a new tensor padded to 'pad' in dimension 'dim'
     """
-    # pad_size = list(vec.shape)
-    # pad_size[dim] = pad - vec.size(dim)
-    # if vec.is_cuda:
-        # zeros_tensor = torch.cuda.FloatTensor(*pad_size)
-        # # zeros_tensor[dim] = vec
-    # else:
-        # zeros_tensor = torch.FloatTensor(*pad_size)
+    pad_size = list(vec.shape)
+    pad_size[dim] = pad - vec.size(dim)
+    if vec.is_cuda:
+      zeros_tensor = torch.cuda.FloatTensor(*pad_size)
+      # # zeros_tensor[dim] = vec
+    else:
+      zeros_tensor = torch.FloatTensor(*pad_size)
 
-    # return torch.cat([vec, zeros_tensor], dim=dim)
+    return torch.cat([vec, zeros_tensor], dim=dim)
 
     # pad_size = list(vec.shape)
     # pad_size[dim] = pad 
@@ -126,7 +126,8 @@ class PadCollate:
         # stack all
         claims_tensors = torch.stack(batched_items[0], dim=0).cuda()
         evidences_tensors = torch.stack(batched_items[1], dim=0).cuda()
-        labels = torch.tensor(labels, dtype=torch.float).cuda()
+        #labels = torch.tensor(labels, dtype=torch.float).cuda()
+        labels = torch.stack(labels)
         return [claims_tensors, claims_text, evidences_tensors, evidences_text, labels] 
 
     def __call__(self, batch):
@@ -185,7 +186,7 @@ class WikiDataset(Dataset):
         claims_text = []
         evidence_tensors = []
         evidence_text = []
-        labels = []
+        labels = None
 
         num_positive_articles = min(len(self.claim_to_article[d['claim']]), 4)  # get all positive articles 
         for idx in range(num_positive_articles):
@@ -210,7 +211,11 @@ class WikiDataset(Dataset):
             claims_text.append(claim_text) 
             claims_tensors.append(claim)
             #print("{}, Evidence: {}, label: {}".format(claim_text, processed, 1.0))
-            labels.append([0,1])
+            if labels is not None:
+                new_label = torch.Tensor([[0,1]]).cuda()
+                labels = torch.cat([labels, new_label], dim=0)
+            else:
+                labels = torch.Tensor([[0,1]]).cuda()
 
         for j in range(num_positive_articles, self.data_sampling):
             if not self.randomize:
@@ -246,9 +251,11 @@ class WikiDataset(Dataset):
                 claims_tensors.append(claim)
 
                 if processed in self.claim_to_article[d['claim']]:
-                    labels.append([0,1])
+                    new_label = torch.Tensor([[0,1]]).cuda()
+                    labels = torch.cat([labels, new_label], dim=0)
                 else:
-                    labels.append([1,0])
+                    new_label = torch.Tensor([[1,0]]).cuda()
+                    labels = torch.cat([labels, new_label], dim=0)
             else:
                 print(d['claim'], e)
                 raise Exception("SKipping append")
@@ -341,7 +348,7 @@ class ValWikiDataset(Dataset):
         claim_texts = []
         evidence_tensors = []
         evidence_text = []
-        labels = []
+        labels = None 
 
         for j in range(evidences_idx, evidences_idx+self.batch_size):
             try:
@@ -378,9 +385,13 @@ class ValWikiDataset(Dataset):
                 # You could probably steal some performance gains by copying on the GPU.
 
                 if processed in self.claim_to_article[d['claim']]:
-                    labels.append([0,1])
+                    labels = torch.Tensor([0,1])
+                    if labels:
+                        labels = torch.stack([labels, [0,1]])
                 else:
-                    labels.append([1,0])
+                    labels = torch.Tensor([1,0])
+                    if labels:
+                        labels = torch.stack([labels, [1, 0]])
             else:
                 print(d['claim'], e, "is not positive length!")
 
