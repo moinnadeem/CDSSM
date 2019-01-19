@@ -43,7 +43,7 @@ def variable_collate(batch):
 
     claims_tensors = stack_uneven(claims_tensors)
     evidences_tensors = stack_uneven(evidences_tensors)
-    labels = torch.FloatTensor(labels).cuda()
+    labels = torch.LongTensor(labels).cuda()
 
     claims_tensors = torch.from_numpy(claims_tensors).float().cuda()
     evidences_tensors = torch.from_numpy(evidences_tensors).float().cuda()
@@ -200,7 +200,7 @@ class WikiDataset(Dataset):
             claims_text.append(claim_text) 
             claims_tensors.append(claim)
             #print("{}, Evidence: {}, label: {}".format(claim_text, processed, 1.0))
-            labels.append(1.0)
+            labels.append([0,1])
 
         for j in range(num_positive_articles, self.data_sampling):
             if not self.randomize:
@@ -236,9 +236,9 @@ class WikiDataset(Dataset):
                 claims_tensors.append(claim)
 
                 if processed in self.claim_to_article[d['claim']]:
-                    labels.append(1.0)
+                    labels.append([0,1])
                 else:
-                    labels.append(0.0)
+                    labels.append([1,0])
             else:
                 print(d['claim'], e)
                 raise Exception("SKipping append")
@@ -310,14 +310,14 @@ class ValWikiDataset(Dataset):
         _, _, _, _, self.claim_to_article = utils.extract_fever_jsonl_data(testFile)
 
     def __len__(self):
-        return (len(self.data)*50)//self.batch_size
+        return (len(self.data)*20)//self.batch_size
 
     def __getitem__(self, index):
         return self.get_item(index)
 
     def get_item(self, index):
-        claim_index = (index*self.batch_size)//50
-        evidences_idx = (index*self.batch_size)%50
+        claim_index = (index*self.batch_size)//20
+        evidences_idx = (index*self.batch_size)%20
 
         d = self.data[claim_index]
         claim = self.claims_dict[d['claim']]
@@ -366,9 +366,9 @@ class ValWikiDataset(Dataset):
                 # You could probably steal some performance gains by copying on the GPU.
 
                 if processed in self.claim_to_article[d['claim']]:
-                    labels.append(1.0)
+                    labels.append([0,1])
                 else:
-                    labels.append(0.0)
+                    labels.append([1,0])
             else:
                 print(d['claim'], e, "is not positive length!")
 
