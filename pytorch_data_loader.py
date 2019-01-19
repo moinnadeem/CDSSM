@@ -60,14 +60,23 @@ def pad_tensor(vec, pad, dim):
     return:
         a new tensor padded to 'pad' in dimension 'dim'
     """
-    pad_size = list(vec.shape)
-    pad_size[dim] = pad - vec.size(dim)
-    if vec.is_cuda:
-        zeros_tensor = torch.cuda.FloatTensor(*pad_size)
-    else:
-        zeros_tensor = torch.FloatTensor(*pad_size)
+    # pad_size = list(vec.shape)
+    # pad_size[dim] = pad - vec.size(dim)
+    # if vec.is_cuda:
+        # zeros_tensor = torch.cuda.FloatTensor(*pad_size)
+        # # zeros_tensor[dim] = vec
+    # else:
+        # zeros_tensor = torch.FloatTensor(*pad_size)
 
-    return torch.cat([vec, zeros_tensor], dim=dim)
+    # return torch.cat([vec, zeros_tensor], dim=dim)
+
+    # pad_size = list(vec.shape)
+    # pad_size[dim] = pad 
+    padding = torch.nn.ZeroPad2d((0, 0, 0, pad - vec.size(dim)))
+    return padding(vec).cuda()
+    
+    # return zeros_tensor
+    # return torch.cat([vec, zeros_tensor], dim=dim)
 
 class PadCollate:
     """
@@ -149,6 +158,7 @@ class WikiDataset(Dataset):
         self.encoder = utils.ClaimEncoder()
         self.claims_dict = claims_dict
         self.batch_size = batch_size
+        self.collate_fn = PadCollate()
         _, _, _, _, self.claim_to_article = utils.extract_fever_jsonl_data(testFile)
         
     def __len__(self):
@@ -244,6 +254,8 @@ class WikiDataset(Dataset):
                 raise Exception("SKipping append")
 
         #claim = claim.expand(evidences.shape[0], claim.shape[0], claim.shape[1])
+        # claims_tensors = self.collate_fn(claims_tensors)
+        # evidence_tensors = self.collate_fn(evidence_tensors)
         return claims_tensors, claims_text, evidence_tensors, evidence_text, labels 
 
     def on_epoch_end(self):
