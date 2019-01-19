@@ -48,12 +48,13 @@ class CDSSM(nn.Module):
         torch.nn.init.xavier_uniform_(self.query_sem.weight)
 
         # adding a hidden layer
-        self.second_query_sem = nn.Linear(L, L)
-        self.second_doc_sem = nn.Linear(L, L)
+        # self.second_query_sem = nn.Linear(L, L)
+        # self.second_doc_sem = nn.Linear(L, L)
 
         # dropout for regularization
-        self.query_dropout = nn.Dropout(0.4)
-        self.document_dropout = nn.Dropout(0.4)
+        self.dropout = nn.Dropout(0.3)
+        self.dropout = nn.Dropout(0.3)
+        print("Using 30% dropout!")
 
         # layers for docs
         self.doc_conv = nn.Conv1d(WORD_DEPTH, K, FILTER_LENGTH)
@@ -66,16 +67,21 @@ class CDSSM(nn.Module):
         torch.nn.init.xavier_uniform_(self.doc_sem.weight)
 
         # learning gamma
-        self.learn_gamma = nn.Conv1d(1, 1, 1)
-        torch.nn.init.xavier_uniform_(self.learn_gamma.weight)
+        # self.learn_gamma = nn.Conv1d(1, 1, 1)
+        # torch.nn.init.xavier_uniform_(self.learn_gamma.weight)
 
         # adding batch norm
-        self.q_norm = nn.BatchNorm1d(K)
-        self.doc_norm = nn.BatchNorm1d(K)
+        self.q_norm = nn.BatchNorm1d(WORD_DEPTH)
+        self.doc_norm = nn.BatchNorm1d(WORD_DEPTH)
         
         # adding q_norm
         self.sem_q_norm = nn.BatchNorm1d(1)
         self.sem_doc_norm = nn.BatchNorm1d(1)
+
+        self.concat_sem = nn.Linear(2*L, 2)
+        torch.nn.init.xavier_uniform_(self.concat_sem.weight)
+
+        self.softmax = nn.LogSoftmax()
 
     def forward(self, q, pos):
         # Query model. The paper uses separate neural nets for queries and documents (see section 5.2).
@@ -92,12 +98,11 @@ class CDSSM(nn.Module):
         # of a single weight matrix (W_c) with each of the word vectors (l_t) from the
         # query matrix (l_Q), adding a bias vector (b_c), and then applying the tanh activation.
         # That is, h_Q = tanh(W_c • l_Q + b_c). Note: the paper does not include bias units.
+        q = self.q_norm(q)
+        pos = self.doc_norm(pos)
 
         q_c = torch.tanh(self.query_conv(q))
         pos_c = torch.tanh(self.doc_conv(pos))
-
-        q_c = self.q_norm(q_c)
-        pos_c = self.doc_norm(pos_c)
         # print("Size after convolution: {}".format(q_c.shape))
 
         # Next, we apply a max-pooling layer to the convolved query matrix.
@@ -115,9 +120,9 @@ class CDSSM(nn.Module):
         q_k = q_k.transpose(1,2)
         pos_k = pos_k.transpose(1,2)
 
+        q_k = self.dropout(q_k)
+        pos_k = self.dropout(pos_k)
         # print("Size after transpose: {}".format(q_k.shape))
-        q_k = self.query_dropout(q_k)
-        pos_k = self.document_dropout(pos_k)
 
         # In this step, we generate the semantic vector represenation of the query. This
         # is a standard neural network dense layer, i.e., y = tanh(W_s • v + b_s). Again,
@@ -128,12 +133,10 @@ class CDSSM(nn.Module):
         q_s = torch.tanh(self.query_sem(q_k))
         pos_s = torch.tanh(self.doc_sem(pos_k))
 
-        q_s = torch.tanh(self.second_query_sem(q_s))
-        pos_s = torch.tanh(self.second_doc_sem(pos_s))
-        # print("Semantic layer shape: {}".format(q_s.shape))
+        q_s = self.dropout(q_s)
+        pos_s = self.dropout(pos_s)
 
-        pos_s = pos_s.squeeze()
-        q_s = q_s.squeeze()
+        # print("Semantic layer shape: {}".format(q_s.shape))
 
         #q_s = q_s.resize(L)
         #pos_s = pos_s.resize(L)
@@ -142,9 +145,13 @@ class CDSSM(nn.Module):
         # a queries and documents
         # dots[0] is the dot-product for positive document, this is necessary to remember
         # because we set the target label accordingly
-        dots = torch.mm(q_s, pos_s.transpose(0,1)).diag() 
-        dots = dots / (torch.norm(q_s)*torch.norm(pos_s))  # divide by the norm to make it cosine distance
 
+        # dots = torch.mm(q_s, pos_s.transpose(0,1)).diag() 
+        # dots = dots / (torch.norm(q_s)*torch.norm(pos_s))  # divide by the norm to make it cosine distance
+
+        all_documents = torch.cat([q_s, pos_s], dim=2)
+        output = torch.tanh(self.concat_sem(all_documents))
+        output = self.dropout(output)
         # dots is a list as of now, lets convert it to torch variable
         #dots = torch.stack(dots)
 
@@ -157,11 +164,10 @@ class CDSSM(nn.Module):
         #dots = dots.unsqueeze(2)
 
         # We transform a scalar into a 3D vector
-        dots = dots.unsqueeze(0)
-        dots = dots.unsqueeze(0)
-        with_gamma = self.learn_gamma(dots)
-        
+        # with_gamma = self.learn_gamma(dots)
+        output = self.softmax(output)
+        # print("Output shape: {}".format(output.shape)) 
         # Finally, we use the softmax function to calculate P(D+|Q).
         #prob = F.logsigmoid(with_gamma)
         #prob = F.softmax(with_gamma)
-        return with_gamma 
+        return output 
