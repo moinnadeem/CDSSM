@@ -52,7 +52,7 @@ def parse_args():
     parser.add_argument("--no-randomize", default=True, action="store_false")
     parser.add_argument("--learning-rate", type=float, help="Learning rate for model.", default=1e-3)
     parser.add_argument("--epochs", type=int, help="Number of epochs to learn for.", default=15)
-    parser.add_argument("--data", help="Folder dataset to load file from.", default="data/large/train.pkl")
+    parser.add_argument("--data", help="Folder dataset to load file from.", default="data/large")
     parser.add_argument("--print", default=False, action="store_true", help="Whether to print predicted labels or not.")
     parser.add_argument("--sparse-evidences", default=False, action="store_true")
     return parser.parse_args()
@@ -87,6 +87,7 @@ def run(args, train, sparse_evidences, claims_dict):
     if torch.cuda.device_count() > 0:
       print("Let's use", torch.cuda.device_count(), "GPU(s)!")
       model = nn.DataParallel(model)
+    
     print("Created model with {:,} parameters.".format(putils.count_parameters(model)))
 
     # if MODEL:
@@ -94,7 +95,7 @@ def run(args, train, sparse_evidences, claims_dict):
         # model.load_state_dict(torch.load(MODEL).state_dict())
 
     print("Created dataset...")
-    train_size = int(len(train) * 0.8)
+    train_size = int(len(train) * 0.80)
     #test = int(len(train) * 0.5)
     train_dataset = pytorch_data_loader.WikiDataset(train[:train_size], claims_dict, data_sampling=DATA_SAMPLING, sparse_evidences=sparse_evidences, randomize=RANDOMIZE) 
     val_dataset = pytorch_data_loader.WikiDataset(train[train_size:], claims_dict, data_sampling=DATA_SAMPLING, sparse_evidences=sparse_evidences, randomize=RANDOMIZE) 
@@ -104,6 +105,7 @@ def run(args, train, sparse_evidences, claims_dict):
 
     # Loss and optimizer
     criterion = torch.nn.NLLLoss()
+    # criterion = torch.nn.SoftMarginLoss()
     # if torch.cuda.device_count() > 0:
         # print("Let's parallelize the backward pass...")
         # criterion = DataParallelCriterion(criterion)
@@ -118,7 +120,8 @@ def run(args, train, sparse_evidences, claims_dict):
     for key, value in parameters.items():
         if type(value)==str:
             value = value.replace("/", "-")
-        model_checkpoint_dir += "_{}-{}".format(key.replace(" ", "_"), value)
+        if key!="model":
+            model_checkpoint_dir += "_{}-{}".format(key.replace(" ", "_"), value)
 
     print("Training...")
     beginning_time = time.time() 
@@ -154,6 +157,7 @@ def run(args, train, sparse_evidences, claims_dict):
                 # y = y.squeeze()
 
                 loss = criterion(y_pred, torch.max(y,1)[1])
+                # loss = criterion(y_pred, y)
 
                 y = y.float()
                 binary_y = torch.max(y, 1)[1]
@@ -255,7 +259,7 @@ def run(args, train, sparse_evidences, claims_dict):
                     info = { 'val_accuracy': val_running_accuracy/OUTPUT_FREQ }
 
                     for tag, value in info.items():
-                       experiment.log_metric(tag, value, step=train_batch_num*(epoch+1))
+                       experiment.log_metric(tag, value, step=val_batch_num*(epoch+1))
                        logger.scalar_summary(tag, value, val_batch_num+1)
 
                     ## 2. Log values and gradients of the parameters (histogram summary)
