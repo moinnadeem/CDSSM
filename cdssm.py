@@ -21,6 +21,7 @@ WORD_DEPTH = WINDOW_SIZE * TOTAL_LETTER_GRAMS # See equation (1).
 WORD_DEPTH = 29244 # See equation (1).
 # Uncomment it, if testing
 # WORD_DEPTH = 1000
+CONV_DIM = 1024
 K = 300 # Dimensionality of the max-pooling layer. See section 3.4.
 L = 128 # Dimensionality of latent semantic space. See section 3.5.
 J = 4 # Number of random unclicked documents serving as negative examples for a query. See section 4.
@@ -36,12 +37,15 @@ class CDSSM(nn.Module):
     def __init__(self):
         super(CDSSM, self).__init__()
         # layers for query
-        self.query_conv = nn.Conv1d(WORD_DEPTH, K, FILTER_LENGTH)
+        self.query_conv = nn.Conv1d(WORD_DEPTH, CONV_DIM, FILTER_LENGTH)
         # adding Xavier-He initialization
         torch.nn.init.xavier_uniform_(self.query_conv.weight)
         
-        # self.second_query_conv = nn.Conv1d(K, K, FILTER_LENGTH)
-        # torch.nn.init.xavier_uniform_(self.second_query_conv.weight)
+        # adding a second convolutional layer
+        self.second_query_conv = nn.Conv1d(CONV_DIM, K, FILTER_LENGTH)
+        torch.nn.init.xavier_uniform_(self.second_query_conv.weight)
+
+        self.max_pool = nn.MaxPool1d(3)
 
         # learn the semantic representation
         self.query_sem = nn.Linear(K, L)
@@ -54,14 +58,14 @@ class CDSSM(nn.Module):
         # dropout for regularization
         self.dropout = nn.Dropout(0.3)
         self.dropout = nn.Dropout(0.3)
-        print("Using 30% dropout!")
+        print("Using 30% dropout with an extra conv!")
 
         # layers for docs
-        self.doc_conv = nn.Conv1d(WORD_DEPTH, K, FILTER_LENGTH)
+        self.doc_conv = nn.Conv1d(WORD_DEPTH, CONV_DIM, FILTER_LENGTH)
         torch.nn.init.xavier_uniform_(self.doc_conv.weight)
 
-        # self.second_doc_conv = nn.Conv1d(K, K, FILTER_LENGTH)
-        # torch.nn.init.xavier_uniform_(self.second_doc_conv.weight)
+        self.second_doc_conv = nn.Conv1d(CONV_DIM, K, FILTER_LENGTH)
+        torch.nn.init.xavier_uniform_(self.second_doc_conv.weight)
 
         self.doc_sem = nn.Linear(K, L)
         torch.nn.init.xavier_uniform_(self.doc_sem.weight)
@@ -105,6 +109,11 @@ class CDSSM(nn.Module):
         pos_c = torch.tanh(self.doc_conv(pos))
         # print("Size after convolution: {}".format(q_c.shape))
 
+        q_c = self.max_pool(q_c)
+        pos_c = self.max_pool(pos_c)
+
+        q_c = torch.tanh(self.second_query_conv(q_c))
+        pos_c = torch.tanh(self.second_doc_conv(pos_c))
         # Next, we apply a max-pooling layer to the convolved query matrix.
         q_k = kmax_pooling(q_c, 2, 1)
         pos_k = kmax_pooling(pos_c, 2, 1)
