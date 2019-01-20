@@ -48,11 +48,12 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Learning the optimal convolution for network.')
     parser.add_argument("--batch-size", type=int, help="Number of queries per batch.", default=10)
     parser.add_argument("--model", help="Loading a pretrained model.", default=None)
-    parser.add_argument("--data-sampling", type=int, help="Number of examples per query.", default=8)
+    parser.add_argument("--data-sampling", type=int, help="Number of examples per query.", default=3)
     parser.add_argument("--no-randomize", default=True, action="store_false")
     parser.add_argument("--learning-rate", type=float, help="Learning rate for model.", default=1e-3)
-    parser.add_argument("--epochs", type=int, help="Number of epochs to learn for.", default=3)
+    parser.add_argument("--epochs", type=int, help="Number of epochs to learn for.", default=15)
     parser.add_argument("--data", help="Folder dataset to load file from.", default="data/large/train.pkl")
+    parser.add_argument("--print", default=False, action="store_true", help="Whether to print predicted labels or not.")
     parser.add_argument("--sparse-evidences", default=False, action="store_true")
     return parser.parse_args()
 
@@ -63,32 +64,34 @@ def run(args, train, sparse_evidences, claims_dict):
     NUM_EPOCHS = args.epochs
     MODEL = args.model
     RANDOMIZE = args.no_randomize
+    PRINT = args.print
     
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
     logger = Logger('./logs/{}'.format(time.localtime()))
 
-    # if MODEL:
-        # print("TEMPORARY change to loading!")
-        # model = torch.load(MODEL, strict=False).module
-    # else:
-        # model = cdssm.CDSSM()
-        # model = model.cuda()
-        # model = model.to(device)
+    if MODEL:
+        print("TEMPORARY change to loading!")
+        model = torch.load(MODEL)
+        model.load_state_dict(torch.load(MODEL).state_dict())
+    else:
+        model = cdssm.CDSSM()
+        model = model.cuda()
+        model = model.to(device)
 
-    model = cdssm.CDSSM()
-    model = model.cuda()
-    model = model.to(device)
+    # model = cdssm.CDSSM()
+    # model = model.cuda()
+    # model = model.to(device)
 
     if torch.cuda.device_count() > 0:
       print("Let's use", torch.cuda.device_count(), "GPU(s)!")
       model = nn.DataParallel(model)
     print("Created model with {:,} parameters.".format(putils.count_parameters(model)))
 
-    if MODEL:
-        print("TEMPORARY change to loading!")
-        model.load_state_dict(torch.load(MODEL).state_dict(), strict=False)
+    # if MODEL:
+        # print("TEMPORARY change to loading!")
+        # model.load_state_dict(torch.load(MODEL).state_dict())
 
     print("Created dataset...")
     train_size = int(len(train) * 0.8)
@@ -118,16 +121,14 @@ def run(args, train, sparse_evidences, claims_dict):
         model_checkpoint_dir += "_{}-{}".format(key.replace(" ", "_"), value)
 
     print("Training...")
-    beginning_time = 0.0
-    best_loss = torch.tensor(float("inf"), dtype=torch.float)
+    beginning_time = time.time() 
+    best_loss = torch.tensor(float("inf"), dtype=torch.float)  # begin loss at infinity
 
     for epoch in range(NUM_EPOCHS):
         beginning_time = time.time()
         mean_train_acc = 0.0
         train_running_loss = 0.0
         train_running_accuracy = 0.0
-        val_running_accuracy = 0.0
-        val_running_loss = 0.0
         model.train()
         experiment.log_current_epoch(epoch)
 
@@ -154,7 +155,6 @@ def run(args, train, sparse_evidences, claims_dict):
 
                 loss = criterion(y_pred, torch.max(y,1)[1])
 
-                predictions = torch.exp(y_pred).round()
                 y = y.float()
                 binary_y = torch.max(y, 1)[1]
                 binary_pred = torch.max(y_pred, 1)[1]
@@ -166,8 +166,9 @@ def run(args, train, sparse_evidences, claims_dict):
                 train_running_loss += loss.item()
 
 
-                # for idx in range(len(y)): 
-                    # print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(claims_text[0], evidences_text[idx], torch.exp(y_pred[idx]), y[idx])) 
+                if PRINT:
+                    for idx in range(len(y)): 
+                        print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(claims_text[0], evidences_text[idx], torch.exp(y_pred[idx]), y[idx])) 
 
                 if (train_batch_num % OUTPUT_FREQ)==0 and train_batch_num>0:
                     elapsed_time = time.time() - beginning_time
@@ -195,16 +196,16 @@ def run(args, train, sparse_evidences, claims_dict):
                 loss.backward()
                 optimizer.step()
 
-        del loss
-        del accuracy
-        del claims_tensors
-        del claims_text
-        del evidences_tensors
-        del evidences_text
-        del labels 
-        del y
-        del y_pred
-        torch.cuda.empty_cache()
+        # del loss
+        # del accuracy
+        # del claims_tensors
+        # del claims_text
+        # del evidences_tensors
+        # del evidences_text
+        # del labels 
+        # del y
+        # del y_pred
+        # torch.cuda.empty_cache()
 
 
         print("Running validation...")
@@ -212,6 +213,8 @@ def run(args, train, sparse_evidences, claims_dict):
         pred = []
         true = []
         avg_loss = 0.0
+        val_running_accuracy = 0.0
+        val_running_loss = 0.0
         beginning_time = time.time()
         with experiment.validate():
             for val_batch_num, val_inputs in enumerate(val_dataloader):
@@ -230,7 +233,6 @@ def run(args, train, sparse_evidences, claims_dict):
 
                 loss = criterion(y_pred, torch.max(y,1)[1])
 
-                predictions = torch.exp(y_pred).round()
                 y = y.float()
 
                 binary_y = torch.max(y, 1)[1]
@@ -257,25 +259,25 @@ def run(args, train, sparse_evidences, claims_dict):
                        logger.scalar_summary(tag, value, val_batch_num+1)
 
                     ## 2. Log values and gradients of the parameters (histogram summary)
-                    #for tag, value in model.named_parameters():
-                    #    tag = tag.replace('.', '/')
-                    #    logger.histo_summary(tag, value.detach().cpu().numpy(), val_batch_num+1)
-                    #    logger.histo_summary(tag+'/grad', value.grad.detach().cpu().numpy(), val_batch_num+1)
+                    for tag, value in model.named_parameters():
+                       tag = tag.replace('.', '/')
+                       logger.histo_summary(tag, value.detach().cpu().numpy(), val_batch_num+1)
+                       logger.histo_summary(tag+'/grad', value.grad.detach().cpu().numpy(), val_batch_num+1)
 
                     val_running_accuracy = 0.0
                     val_running_loss = 0.0
                     beginning_time = time.time()
 
-        del loss
-        del accuracy
-        del claims_tensors
-        del claims_text
-        del evidences_tensors
-        del evidences_text
-        del labels 
-        del y
-        del y_pred
-        torch.cuda.empty_cache()
+        # del loss
+        # del accuracy
+        # del claims_tensors
+        # del claims_text
+        # del evidences_tensors
+        # del evidences_text
+        # del labels 
+        # del y
+        # del y_pred
+        # torch.cuda.empty_cache()
 
         accuracy = accuracy_score(true, pred) 
         print("[{}] mean accuracy: {}, mean loss: {}".format(epoch, accuracy, avg_loss / len(val_dataloader)))
@@ -284,7 +286,7 @@ def run(args, train, sparse_evidences, claims_dict):
         pred = np.array(pred).astype("int") 
         print(classification_report(true, pred))
 
-        best_loss = torch.tensor(max(avg_loss / len(val_dataloader), best_loss.cpu().numpy()))
+        best_loss = torch.tensor(min(avg_loss / len(val_dataloader), best_loss.cpu().numpy()))
         is_best = bool((avg_loss / len(val_dataloader)) <= best_loss)
         
         putils.save_checkpoint({"epoch": epoch, "model": model, "best_loss": best_loss}, is_best, filename="{}_loss_{}".format(model_checkpoint_dir, best_loss.cpu().numpy()))
