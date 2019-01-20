@@ -45,8 +45,8 @@ def variable_collate(batch):
     evidences_tensors = stack_uneven(evidences_tensors)
     labels = torch.LongTensor(labels).cuda()
 
-    claims_tensors = torch.from_numpy(claims_tensors).float().cuda()
-    evidences_tensors = torch.from_numpy(evidences_tensors).float().cuda()
+    claims_tensors = torch.from_numpy(claims_tensors).cuda()
+    evidences_tensors = torch.from_numpy(evidences_tensors).cuda()
 
     return [claims_tensors, claims_text, evidences_tensors, evidences_text, labels]
     
@@ -177,7 +177,7 @@ class WikiDataset(Dataset):
         #claim = sparse.vstack(claim).toarray()  # turn it into a array
         claim = self.claims_dict[d['claim']]
         claim = claim.toarray()
-        claim = torch.Tensor(claim).cuda()
+        claim = torch.from_numpy(claim).cuda()
         claim_text = d['claim']
         #claim = sparse.vstack(self.encoder.tokenize_claim(utils.preprocess_article_name(d['claim']))).toarray()
 
@@ -202,7 +202,7 @@ class WikiDataset(Dataset):
                 evidence = sparse.vstack(evidence)
 
             evidence = evidence.toarray()
-            evidence = torch.Tensor(evidence).cuda()
+            evidence = torch.from_numpy(evidence).cuda()
 
             evidence_text.append(processed)
             evidence_tensors.append(evidence)
@@ -238,7 +238,7 @@ class WikiDataset(Dataset):
 
             if evidence.shape[0]>0:
                 evidence = evidence.toarray()
-                evidence = torch.Tensor(evidence).cuda()
+                evidence = torch.from_numpy(evidence).cuda()
                 evidence_tensors.append(evidence)
                 evidence_text.append(processed)
 
@@ -334,7 +334,7 @@ class ValWikiDataset(Dataset):
         d = self.data[claim_index]
         claim = self.claims_dict[d['claim']]
         claim = claim.toarray()
-        claim = torch.Tensor(claim).cuda()
+        claim = torch.from_numpy(claim).cuda().float()
         claim_text = d['claim']
 
         claim_tensors = []
@@ -368,7 +368,7 @@ class ValWikiDataset(Dataset):
 
             if evidence.shape[0]>0:
                 evidence = evidence.toarray()
-                evidence = torch.Tensor(evidence).cuda()
+                evidence = torch.from_numpy(evidence).cuda().float()
                 evidence_tensors.append(evidence)
                 evidence_text.append(processed)
 
