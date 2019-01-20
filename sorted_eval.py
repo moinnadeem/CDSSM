@@ -163,7 +163,7 @@ def run():
                 #test_running_recall_at_ten += 0.0
                 pass
             else:
-                test_running_recall_at_ten += calculate_recall(retrieved_evidences, relevant_evidences, k=50)
+                test_running_recall_at_ten += calculate_recall(retrieved_evidences, relevant_evidences, k=20)
 
 
             if args.print:      
@@ -189,7 +189,7 @@ def run():
 
         if batch_num % OUTPUT_FREQ==0 and batch_num>0:
             elapsed_time = time.time() - beginning_time
-            print("[{}:{:3f}s]: accuracy: {}, recall@50: {}".format(batch_num / len(dataloader), elapsed_time, test_running_accuracy / OUTPUT_FREQ, test_running_recall_at_ten / OUTPUT_FREQ))
+            print("[{}:{:3f}s]: accuracy: {}, recall@20: {}".format(batch_num / len(dataloader), elapsed_time, test_running_accuracy / OUTPUT_FREQ, test_running_recall_at_ten / OUTPUT_FREQ))
             for k in sorted(recall.keys()):
                 v = recall[k]
                 print("recall@{}: {}".format(k, np.mean(v)))
