@@ -10,6 +10,7 @@
 
 import pickle
 from multiprocessing import cpu_count
+from comet_ml import Experiment
 import os
 from parallel import DataParallelModel, DataParallelCriterion
 import parallel
@@ -25,7 +26,6 @@ import torchvision.datasets as dsets
 import torchvision.transforms as transforms
 from joblib import Parallel, delayed
 from logger import Logger
-from hyperdash import Experiment, monitor
 from scipy import sparse
 from sys import argv
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
@@ -84,16 +84,15 @@ def run():
 
     OUTPUT_FREQ = int((len(dataset))*0.02) 
     
-    parameters = {"batch size": BATCH_SIZE, "data": args.data}
-    exp_params = {}
-    exp = Experiment("CLSM V2")
-    for key, value in parameters.items():
-       exp_params[key] = exp.param(key, value) 
+    parameters = {"batch size": BATCH_SIZE, "data": args.data, "model": args.model}
+    experiment = Experiment(api_key="YLsW4AvRTYGxzdDqlWRGCOhee", project_name="clsm", workspace="moinnadeem")
+    experiment.log_parameters(parameters)
 
     true = []
     pred = []
     model.eval()
     test_running_accuracy = 0.0
+    test_running_loss = 0.0
     test_running_recall_at_ten = 0.0
 
     recall_intervals = [1,2,5,10,20]
@@ -105,44 +104,43 @@ def run():
 
     print("Evaluating...")
     beginning_time = time.time() 
+    criterion = torch.nn.NLLLoss()
 
-    prev_claim = None
-    for batch_num, inputs in enumerate(dataloader):
-        num_batches += 1
-        claims_tensors, claims_text, evidences_tensors, evidences_text, labels = inputs  
+    with experiment.test():
+        for batch_num, inputs in enumerate(dataloader):
+            num_batches += 1
+            claims_tensors, claims_text, evidences_tensors, evidences_text, labels = inputs  
 
-        claims_tensors = claims_tensors.cuda()
-        evidences_tensors = evidences_tensors.cuda()
-        labels = labels.cuda()
+            claims_tensors = claims_tensors.cuda()
+            evidences_tensors = evidences_tensors.cuda()
+            labels = labels.cuda()
 
-        y_pred = model(claims_tensors, evidences_tensors)
+            y_pred = model(claims_tensors, evidences_tensors)
 
-        y = (labels).float()
+            y = (labels).float()
 
-        y_pred = y_pred.squeeze()
+            y_pred = y_pred.squeeze()
+            loss = criterion(y_pred, torch.max(y,1)[1])
+            test_running_loss += loss.item()
 
-        binary_y = torch.max(y, 1)[1]
-        binary_y_pred = torch.max(y_pred, 1)[1]
-        accuracy = (binary_y==binary_y_pred).to(device)
-        bin_acc = y_pred[:,1]
-        accuracy = accuracy.float().mean()
-        # bin_acc = y_pred
+            y_pred = torch.exp(y_pred)
+            binary_y = torch.max(y, 1)[1]
+            binary_y_pred = torch.max(y_pred, 1)[1]
+            accuracy = (binary_y==binary_y_pred).to(device)
+            bin_acc = y_pred[:,1]
+            accuracy = accuracy.float().mean()
+            # bin_acc = y_pred
 
-        if prev_claim is None:
-            all_y = y 
-            all_evidences = evidences_text 
-            all_bin_acc = bin_acc 
-        elif prev_claim!=claims_text[0]:
             # handle ranking here!
-            sorted_idxs = torch.sort(all_bin_acc, descending=True)[1]
+            sorted_idxs = torch.sort(bin_acc, descending=True)[1]
 
             relevant_evidences = []
-            for idx in range(all_y.shape[0]):
+            for idx in range(y.shape[0]):
                 try:
-                    if int(all_y[idx][1]):
-                        relevant_evidences.append(all_evidences[idx])
+                    if int(y[idx][1]):
+                        relevant_evidences.append(evidences_text[idx])
                 except Exception as e:
-                    print(all_y, all_y[idx], idx)
+                    print(y, y[idx], idx)
                     raise e
 
             # if len(relevant_evidences)==0:
@@ -150,7 +148,7 @@ def run():
 
             retrieved_evidences = []
             for idx in sorted_idxs:
-                retrieved_evidences.append(all_evidences[idx])
+                retrieved_evidences.append(evidences_text[idx])
 
             for k in recall_intervals:
                 if len(relevant_evidences)==0:
@@ -168,51 +166,42 @@ def run():
 
             if args.print:      
                 for idx in sorted_idxs: 
-                    print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(prev_claim, all_evidences[idx], torch.exp(all_bin_acc[idx]), all_y[idx])) 
+                    print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(claims_text[0], evidences_text[idx], y_pred[idx], y[idx])) 
 
-            # reset tensors
-            all_y = y 
-            all_evidences = evidences_text 
-            all_bin_acc = bin_acc 
-        else:
-            all_bin_acc = torch.cat([all_bin_acc, bin_acc])
-            all_evidences.extend(evidences_text)
-            all_y = torch.cat([all_y, y]) 
-        prev_claim = claims_text[0]
- 
-        # compute recall
-        # assuming only one claim, this creates a list of all relevant evidences
-        true.extend(binary_y.tolist())
-        pred.extend(binary_y_pred.tolist())
+            # compute recall
+            # assuming only one claim, this creates a list of all relevant evidences
+            true.extend(binary_y.tolist())
+            pred.extend(binary_y_pred.tolist())
 
-        test_running_accuracy += accuracy.item()
+            test_running_accuracy += accuracy.item()
 
-        if batch_num % OUTPUT_FREQ==0 and batch_num>0:
-            elapsed_time = time.time() - beginning_time
-            print("[{}:{:3f}s]: accuracy: {}, recall@20: {}".format(batch_num / len(dataloader), elapsed_time, test_running_accuracy / OUTPUT_FREQ, test_running_recall_at_ten / OUTPUT_FREQ))
-            for k in sorted(recall.keys()):
-                v = recall[k]
-                print("recall@{}: {}".format(k, np.mean(v)))
+            if batch_num % OUTPUT_FREQ==0 and batch_num>0:
+                elapsed_time = time.time() - beginning_time
+                print("[{}:{:3f}s]: accuracy: {}, loss: {}, recall@20: {}".format(batch_num / len(dataloader), elapsed_time, test_running_accuracy / OUTPUT_FREQ, test_running_loss / OUTPUT_FREQ, test_running_recall_at_ten / OUTPUT_FREQ))
+                for k in sorted(recall.keys()):
+                    v = recall[k]
+                    print("recall@{}: {}".format(k, np.mean(v)))
 
-            # 1. Log scalar values (scalar summary)
-            info = { 'test_accuracy': test_running_accuracy/OUTPUT_FREQ }
+                # 1. Log scalar values (scalar summary)
+                info = { 'test_accuracy': test_running_accuracy/OUTPUT_FREQ }
 
-            true = [int(i) for i in true]
-            pred = [int(i) for i in pred]
-            print(classification_report(true, pred))
+                true = [int(i) for i in true]
+                pred = [int(i) for i in pred]
+                print(classification_report(true, pred))
 
-            for tag, value in info.items():
-                exp.metric(tag, value, log=False)
-            #     logger.scalar_summary(tag, value, batch_num+1)
+                for tag, value in info.items():
+                   experiment.log_metric(tag, value, step=train_batch_num*(epoch+1))
+                #     logger.scalar_summary(tag, value, batch_num+1)
 
-            # 2. Log values and gradients of the parameters (histogram summary)
-            # for tag, value in model.named_parameters():
-            #     tag = tag.replace('.', '/')
-            #     logger.histo_summary(tag, value.data.cpu().numpy(), batch_num+1)
+                # 2. Log values and gradients of the parameters (histogram summary)
+                # for tag, value in model.named_parameters():
+                #     tag = tag.replace('.', '/')
+                #     logger.histo_summary(tag, value.data.cpu().numpy(), batch_num+1)
 
-            test_running_accuracy = 0.0
-            test_running_recall_at_ten = 0.0
-            beginning_time = time.time()
+                test_running_accuracy = 0.0
+                test_running_recall_at_ten = 0.0
+                test_running_loss = 0.0
+                beginning_time = time.time()
 
         # del claims_tensors
         # del claims_text
