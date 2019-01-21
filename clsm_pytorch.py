@@ -104,8 +104,9 @@ def run(args, train, sparse_evidences, claims_dict):
     val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=0, shuffle=True, collate_fn=pytorch_data_loader.PadCollate())
 
     # Loss and optimizer
-    criterion = torch.nn.NLLLoss()
+    #criterion = torch.nn.NLLLoss()
     # criterion = torch.nn.SoftMarginLoss()
+    criterion = putils.ContrastiveLoss()
     # if torch.cuda.device_count() > 0:
         # print("Let's parallelize the backward pass...")
         # criterion = DataParallelCriterion(criterion)
@@ -152,6 +153,7 @@ def run(args, train, sparse_evidences, claims_dict):
                 y_pred = model(claims_tensors, evidences_tensors)
 
                 y = (labels)
+                y = 1 - y
                 # y = y.unsqueeze(0)
                 # y = y.unsqueeze(0)
                 # y_pred = parallel.gather(y_pred, 0)
@@ -159,19 +161,19 @@ def run(args, train, sparse_evidences, claims_dict):
                 y_pred = y_pred.squeeze()
                 # y = y.squeeze()
 
-                loss = criterion(y_pred, torch.max(y,1)[1])
-                # loss = criterion(y_pred, y)
+                # loss = criterion(y_pred, torch.max(y,1)[1])
+                loss = criterion(y_pred, y)
 
                 y = y.float()
-                binary_y = torch.max(y, 1)[1]
-                binary_pred = torch.max(y_pred, 1)[1]
-                accuracy = (binary_y==binary_pred).to("cuda")
-                accuracy = accuracy.float()
+                classifications = torch.norm(y_pred, p="fro", dim=1) >= 1.0
+                print("Classifications shape: {}, y shape: {}".format(classifications.shape, y.shape))
+                classifications = classifications.to(device) 
+                accuracy = classifications.float()
                 accuracy = accuracy.mean()
+
                 train_running_accuracy += accuracy.item()
                 mean_train_acc += accuracy.item()
                 train_running_loss += loss.item()
-
 
                 if PRINT:
                     for idx in range(len(y)): 
@@ -179,9 +181,8 @@ def run(args, train, sparse_evidences, claims_dict):
 
                 if (train_batch_num % OUTPUT_FREQ)==0 and train_batch_num>0:
                     elapsed_time = time.time() - beginning_time
-                    binary_y = torch.max(y, 1)[1]
-                    binary_pred = torch.max(y_pred, 1)[1]
-                    print("[{}:{}:{:3f}s] training loss: {}, training accuracy: {}, training recall: {}".format(epoch, train_batch_num / (len(train_dataset)/BATCH_SIZE), elapsed_time, train_running_loss/OUTPUT_FREQ, train_running_accuracy/OUTPUT_FREQ, recall_score(binary_y.cpu().detach().numpy(), binary_pred.cpu().detach().numpy())))
+                    print("Classifications shape: {}".format(classifications.shape))
+                    print("[{}:{}:{:3f}s] training loss: {}, training accuracy: {}, training recall: {}".format(epoch, train_batch_num / (len(train_dataset)/BATCH_SIZE), elapsed_time, train_running_loss/OUTPUT_FREQ, train_running_accuracy/OUTPUT_FREQ, recall_score(y.cpu().detach().numpy(), classifications.cpu().detach().numpy())))
 
                     # 1. Log scalar values (scalar summary)
                     info = { 'train_loss': train_running_loss/OUTPUT_FREQ, 'train_accuracy': train_running_accuracy/OUTPUT_FREQ }
@@ -234,29 +235,31 @@ def run(args, train, sparse_evidences, claims_dict):
                 y_pred = model(claims_tensors, evidences_tensors)
 
                 y = (labels)
+                y = 1-y
                 # y_pred = parallel.gather(y_pred, 0)
 
                 y_pred = y_pred.squeeze()
 
-                loss = criterion(y_pred, torch.max(y,1)[1])
+                #loss = criterion(y_pred, torch.max(y,1)[1])
+                loss = criterion(y_pred, y)
 
                 y = y.float()
 
-                binary_y = torch.max(y, 1)[1]
-                binary_pred = torch.max(y_pred, 1)[1]
-                true.extend(binary_y.tolist())
-                pred.extend(binary_pred.tolist())
+                classifications = torch.norm(y_pred, p="fro") >= 1.0
+                classifications = classifications.to(device) 
+                accuracy = classifications.float()
+                accuracy = classifications.mean()
 
-                accuracy = (binary_y==binary_pred).to("cuda")
+                true.extend(y.tolist())
+                pred.extend(classifications.tolist())
 
-                accuracy = accuracy.float().mean()
                 val_running_accuracy += accuracy.item()
                 val_running_loss += loss.item() 
                 avg_loss += loss.item()
 
                 if (val_batch_num % OUTPUT_FREQ)==0 and val_batch_num>0:
                     elapsed_time = time.time() - beginning_time
-                    print("[{}:{}:{:3f}s] validation loss: {}, accuracy: {}, recall: {}".format(epoch, val_batch_num / (len(val_dataset)/BATCH_SIZE), elapsed_time, val_running_loss/OUTPUT_FREQ, val_running_accuracy/OUTPUT_FREQ, recall_score(binary_y.cpu().detach().numpy(), binary_pred.cpu().detach().numpy())))
+                    print("[{}:{}:{:3f}s] validation loss: {}, accuracy: {}, recall: {}".format(epoch, val_batch_num / (len(val_dataset)/BATCH_SIZE), elapsed_time, val_running_loss/OUTPUT_FREQ, val_running_accuracy/OUTPUT_FREQ, recall_score(classifications.cpu().detach().numpy(), y.cpu().detach().numpy())))
 
                     # 1. Log scalar values (scalar summary)
                     info = { 'val_accuracy': val_running_accuracy/OUTPUT_FREQ }
