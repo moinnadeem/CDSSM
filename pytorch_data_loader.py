@@ -210,7 +210,7 @@ class WikiDataset(Dataset):
             claims_text.append(claim_text) 
             claims_tensors.append(claim)
             #print("{}, Evidence: {}, label: {}".format(claim_text, processed, 1.0))
-            labels.append([0,1])
+            labels.append(1)
 
         for j in range(num_positive_articles, self.data_sampling):
             if not self.randomize:
@@ -246,9 +246,9 @@ class WikiDataset(Dataset):
                 claims_tensors.append(claim)
 
                 if processed in self.claim_to_article[d['claim']]:
-                    labels.append([0,1])
+                    labels.append(1)
                 else:
-                    labels.append([1,0])
+                    labels.append(0)
             else:
                 print(d['claim'], e)
                 raise Exception("SKipping append")
@@ -378,9 +378,9 @@ class ValWikiDataset(Dataset):
                 # You could probably steal some performance gains by copying on the GPU.
 
                 if processed in self.claim_to_article[d['claim']]:
-                    labels.append([0,1])
+                    labels.append(1)
                 else:
-                    labels.append([1,0])
+                    labels.append(0)
             else:
                 print(d['claim'], e, "is not positive length!")
 
