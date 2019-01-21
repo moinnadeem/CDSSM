@@ -106,7 +106,8 @@ def run():
 
     print("Evaluating...")
     beginning_time = time.time() 
-    criterion = torch.nn.NLLLoss()
+    #criterion = torch.nn.NLLLoss()
+    criterion = torch.nn.SoftMarginLoss()
 
     with experiment.test():
         for batch_num, inputs in enumerate(dataloader):
@@ -117,12 +118,16 @@ def run():
             evidences_tensors = evidences_tensors.cuda()
             labels = labels.cuda()
 
-            y_pred = model(claims_tensors, evidences_tensors)
+            try:
+                y_pred = model(claims_tensors, evidences_tensors)
+            except Exception as e:
+                continue
 
             y = (labels).float()
 
             y_pred = y_pred.squeeze()
-            loss = criterion(y_pred, torch.max(y,1)[1])
+            # loss = criterion(y_pred, torch.max(y,1)[1])
+            loss = criterion(y_pred, y)
             test_running_loss += loss.item()
 
             y_pred = torch.exp(y_pred)
@@ -202,7 +207,8 @@ def run():
                 test_running_accuracy = 0.0
                 test_running_recall_at_ten = 0.0
                 test_running_loss = 0.0
-                beginning_time = time.time()
+                beginning_time = 0.0
+                # beginning_time = time.time()
 
         # del claims_tensors
         # del claims_text
