@@ -86,7 +86,9 @@ def run():
     
     parameters = {"batch size": BATCH_SIZE, "data": args.data, "model": args.model}
     experiment = Experiment(api_key="YLsW4AvRTYGxzdDqlWRGCOhee", project_name="clsm", workspace="moinnadeem")
+    experiment.add_tag("test")
     experiment.log_parameters(parameters)
+    experiment.log_asset("cdssm.py")
 
     true = []
     pred = []
@@ -190,8 +192,7 @@ def run():
                 print(classification_report(true, pred))
 
                 for tag, value in info.items():
-                   experiment.log_metric(tag, value, step=train_batch_num*(epoch+1))
-                #     logger.scalar_summary(tag, value, batch_num+1)
+                   experiment.log_metric(tag, value, step=batch_num)
 
                 # 2. Log values and gradients of the parameters (histogram summary)
                 # for tag, value in model.named_parameters():
@@ -272,5 +273,5 @@ if __name__=="__main__":
         print("Loading validation claims data...")
         claims_dict = joblib.load("claims_dict.pkl")
 
-    torch.multiprocessing.set_start_method("spawn", force=True)
+    # torch.multiprocessing.set_start_method("spawn", force=True)
     run()
