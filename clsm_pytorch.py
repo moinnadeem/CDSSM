@@ -114,6 +114,9 @@ def run(args, train, sparse_evidences, claims_dict):
     OUTPUT_FREQ = max(int((len(train_dataset)/BATCH_SIZE)*0.02), 20) 
     parameters = {"batch size": BATCH_SIZE, "epochs": NUM_EPOCHS, "learning rate": LEARNING_RATE, "optimizer": optimizer.__class__.__name__, "loss": criterion.__class__.__name__, "training size": train_size, "data sampling rate": DATA_SAMPLING, "data": args.data, "sparse_evidences": args.sparse_evidences, "randomize": RANDOMIZE, "model": MODEL}
     experiment = Experiment(api_key="YLsW4AvRTYGxzdDqlWRGCOhee", project_name="clsm", workspace="moinnadeem")
+    experiment.add_tag("train")
+    experiment.log_asset("cdssm.py")
+    experiment.log_dataset_info(name=args.data)
     experiment.log_parameters(parameters)
 
     model_checkpoint_dir = "models/saved_model" 
