@@ -56,8 +56,8 @@ class CDSSM(nn.Module):
         # self.second_doc_sem = nn.Linear(L, L)
 
         # dropout for regularization
-        self.dropout = nn.Dropout(0.3)
-        self.dropout = nn.Dropout(0.3)
+        self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout(0.2)
         print("Using 30% dropout with an extra conv!")
 
         # layers for docs
@@ -82,7 +82,7 @@ class CDSSM(nn.Module):
         self.sem_q_norm = nn.BatchNorm1d(1)
         self.sem_doc_norm = nn.BatchNorm1d(1)
 
-        self.concat_sem = nn.Linear(2*L, 2)
+        self.concat_sem = nn.Linear(2*L, L)
         torch.nn.init.xavier_uniform_(self.concat_sem.weight)
 
         self.softmax = nn.LogSoftmax()
@@ -112,6 +112,7 @@ class CDSSM(nn.Module):
         q_c = self.max_pool(q_c)
         pos_c = self.max_pool(pos_c)
 
+        # print("Size after pooling: {}".format(q_c.shape))
         q_c = torch.tanh(self.second_query_conv(q_c))
         pos_c = torch.tanh(self.second_doc_conv(pos_c))
         # Next, we apply a max-pooling layer to the convolved query matrix.
@@ -123,8 +124,8 @@ class CDSSM(nn.Module):
         # q_k = torch.tanh(self.second_query_conv(q_k))
         # pos_k = torch.tanh(self.second_doc_conv(pos_k))
 
-        q_k = kmax_pooling(q_k, 2, 1)
-        pos_k = kmax_pooling(pos_k, 2, 1)
+        # q_k = kmax_pooling(q_k, 2, 1)
+        # pos_k = kmax_pooling(pos_k, 2, 1)
 
         q_k = q_k.transpose(1,2)
         pos_k = pos_k.transpose(1,2)
@@ -174,7 +175,7 @@ class CDSSM(nn.Module):
 
         # We transform a scalar into a 3D vector
         # with_gamma = self.learn_gamma(dots)
-        output = self.softmax(output)
+        # output = self.softmax(output)
         # print("Output shape: {}".format(output.shape)) 
         # Finally, we use the softmax function to calculate P(D+|Q).
         #prob = F.logsigmoid(with_gamma)
