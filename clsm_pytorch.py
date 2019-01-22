@@ -106,7 +106,7 @@ def run(args, train, sparse_evidences, claims_dict):
     # Loss and optimizer
     #criterion = torch.nn.NLLLoss()
     # criterion = torch.nn.SoftMarginLoss()
-    criterion = putils.ContrastiveLoss()
+    criterion = putils.ContrastiveLoss(margin=1)
     # if torch.cuda.device_count() > 0:
         # print("Let's parallelize the backward pass...")
         # criterion = DataParallelCriterion(criterion)
@@ -165,10 +165,9 @@ def run(args, train, sparse_evidences, claims_dict):
                 loss = criterion(y_pred, y)
 
                 y = y.float()
-                classifications = torch.norm(y_pred, p="fro", dim=1) >= 1.0
-                print("Classifications shape: {}, y shape: {}".format(classifications.shape, y.shape))
-                classifications = classifications.to(device) 
-                accuracy = classifications.float()
+                classifications = torch.norm(y_pred, p="fro", dim=1) >= 1
+                classifications = classifications.to(device).float() 
+                accuracy = (classifications==y).float()
                 accuracy = accuracy.mean()
 
                 train_running_accuracy += accuracy.item()
@@ -181,7 +180,6 @@ def run(args, train, sparse_evidences, claims_dict):
 
                 if (train_batch_num % OUTPUT_FREQ)==0 and train_batch_num>0:
                     elapsed_time = time.time() - beginning_time
-                    print("Classifications shape: {}".format(classifications.shape))
                     print("[{}:{}:{:3f}s] training loss: {}, training accuracy: {}, training recall: {}".format(epoch, train_batch_num / (len(train_dataset)/BATCH_SIZE), elapsed_time, train_running_loss/OUTPUT_FREQ, train_running_accuracy/OUTPUT_FREQ, recall_score(y.cpu().detach().numpy(), classifications.cpu().detach().numpy())))
 
                     # 1. Log scalar values (scalar summary)
@@ -245,10 +243,11 @@ def run(args, train, sparse_evidences, claims_dict):
 
                 y = y.float()
 
-                classifications = torch.norm(y_pred, p="fro") >= 1.0
-                classifications = classifications.to(device) 
-                accuracy = classifications.float()
-                accuracy = classifications.mean()
+                classifications = torch.norm(y_pred, p="fro", dim=1) >= 1.0
+                classifications = classifications.to(device).float() 
+
+                accuracy = (classifications==y).float()
+                accuracy = accuracy.mean()
 
                 true.extend(y.tolist())
                 pred.extend(classifications.tolist())
