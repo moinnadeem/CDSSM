@@ -176,7 +176,7 @@ def run(args, train, sparse_evidences, claims_dict):
 
                 if PRINT:
                     for idx in range(len(y)): 
-                        print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(claims_text[0], evidences_text[idx], torch.exp(y_pred[idx]), y[idx])) 
+                        print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(claims_text[0], evidences_text[idx], classifications[idx], y[idx])) 
 
                 if (train_batch_num % OUTPUT_FREQ)==0 and train_batch_num>0:
                     elapsed_time = time.time() - beginning_time
