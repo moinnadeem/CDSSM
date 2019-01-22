@@ -13,6 +13,7 @@ from multiprocessing import cpu_count
 from comet_ml import Experiment
 import os
 from parallel import DataParallelModel, DataParallelCriterion
+import pytorch_utils as putils
 import parallel
 
 import joblib
@@ -107,7 +108,8 @@ def run():
     print("Evaluating...")
     beginning_time = time.time() 
     #criterion = torch.nn.NLLLoss()
-    criterion = torch.nn.SoftMarginLoss()
+    # criterion = torch.nn.SoftMarginLoss()
+    criterion = putils.ContrastiveLoss()
 
     with experiment.test():
         for batch_num, inputs in enumerate(dataloader):
@@ -124,27 +126,27 @@ def run():
                 continue
 
             y = (labels).float()
+            y = 1-y
 
             y_pred = y_pred.squeeze()
             # loss = criterion(y_pred, torch.max(y,1)[1])
             loss = criterion(y_pred, y)
             test_running_loss += loss.item()
 
-            y_pred = torch.exp(y_pred)
-            binary_y = torch.max(y, 1)[1]
-            binary_y_pred = torch.max(y_pred, 1)[1]
-            accuracy = (binary_y==binary_y_pred).to(device)
-            bin_acc = y_pred[:,1]
+            classifications = torch.norm(y_pred, p="fro", dim=1)
+            binary_classifications = classifications >= 1
+
+            accuracy = (classifications==y).to(device)
             accuracy = accuracy.float().mean()
             # bin_acc = y_pred
 
             # handle ranking here!
-            sorted_idxs = torch.sort(bin_acc, descending=True)[1]
+            sorted_idxs = torch.sort(classifications, descending=True)[1]
 
             relevant_evidences = []
             for idx in range(y.shape[0]):
                 try:
-                    if int(y[idx][1]):
+                    if int(y[idx]):
                         relevant_evidences.append(evidences_text[idx])
                 except Exception as e:
                     print(y, y[idx], idx)
@@ -173,12 +175,12 @@ def run():
 
             if args.print:      
                 for idx in sorted_idxs: 
-                    print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(claims_text[0], evidences_text[idx], y_pred[idx], y[idx])) 
+                    print("Claim: {}, Evidence: {}, Prediction: {}, Label: {}".format(claims_text[0], evidences_text[idx], classifications[idx], y[idx])) 
 
             # compute recall
             # assuming only one claim, this creates a list of all relevant evidences
-            true.extend(binary_y.tolist())
-            pred.extend(binary_y_pred.tolist())
+            true.extend(y.tolist())
+            pred.extend(classifications.tolist())
 
             test_running_accuracy += accuracy.item()
 
