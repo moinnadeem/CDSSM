@@ -141,12 +141,12 @@ def run():
             # bin_acc = y_pred
 
             # handle ranking here!
-            sorted_idxs = torch.sort(classifications, descending=True)[1]
+            sorted_idxs = torch.sort(classifications, descending=False)[1]
 
             relevant_evidences = []
             for idx in range(y.shape[0]):
                 try:
-                    if int(y[idx]):
+                    if not int(y[idx]):
                         relevant_evidences.append(evidences_text[idx])
                 except Exception as e:
                     print(y, y[idx], idx)
