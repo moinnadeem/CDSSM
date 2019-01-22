@@ -37,15 +37,15 @@ class CDSSM(nn.Module):
     def __init__(self):
         super(CDSSM, self).__init__()
         # layers for query
-        self.query_conv = nn.Conv1d(WORD_DEPTH, CONV_DIM, FILTER_LENGTH)
+        self.query_conv = nn.Conv1d(WORD_DEPTH, K, FILTER_LENGTH)
         # adding Xavier-He initialization
         torch.nn.init.xavier_uniform_(self.query_conv.weight)
         
         # adding a second convolutional layer
-        self.second_query_conv = nn.Conv1d(CONV_DIM, K, FILTER_LENGTH)
-        torch.nn.init.xavier_uniform_(self.second_query_conv.weight)
+        # self.second_query_conv = nn.Conv1d(CONV_DIM, K, FILTER_LENGTH)
+        # torch.nn.init.xavier_uniform_(self.second_query_conv.weight)
 
-        self.max_pool = nn.MaxPool1d(3)
+        # self.max_pool = nn.MaxPool1d(3)
 
         # learn the semantic representation
         self.query_sem = nn.Linear(K, L)
@@ -61,11 +61,11 @@ class CDSSM(nn.Module):
         print("Using 30% dropout with an extra conv!")
 
         # layers for docs
-        self.doc_conv = nn.Conv1d(WORD_DEPTH, CONV_DIM, FILTER_LENGTH)
+        self.doc_conv = nn.Conv1d(WORD_DEPTH, K, FILTER_LENGTH)
         torch.nn.init.xavier_uniform_(self.doc_conv.weight)
 
-        self.second_doc_conv = nn.Conv1d(CONV_DIM, K, FILTER_LENGTH)
-        torch.nn.init.xavier_uniform_(self.second_doc_conv.weight)
+        # self.second_doc_conv = nn.Conv1d(CONV_DIM, K, FILTER_LENGTH)
+        # torch.nn.init.xavier_uniform_(self.second_doc_conv.weight)
 
         self.doc_sem = nn.Linear(K, L)
         torch.nn.init.xavier_uniform_(self.doc_sem.weight)
@@ -82,8 +82,8 @@ class CDSSM(nn.Module):
         self.sem_q_norm = nn.BatchNorm1d(1)
         self.sem_doc_norm = nn.BatchNorm1d(1)
 
-        self.concat_sem = nn.Linear(2*L, L)
-        torch.nn.init.xavier_uniform_(self.concat_sem.weight)
+        # self.concat_sem = nn.Linear(2*L, L//2)
+        # torch.nn.init.xavier_uniform_(self.concat_sem.weight)
 
         self.softmax = nn.LogSoftmax()
 
@@ -109,12 +109,12 @@ class CDSSM(nn.Module):
         pos_c = torch.tanh(self.doc_conv(pos))
         # print("Size after convolution: {}".format(q_c.shape))
 
-        q_c = self.max_pool(q_c)
-        pos_c = self.max_pool(pos_c)
+        # q_c = self.max_pool(q_c)
+        # pos_c = self.max_pool(pos_c)
 
         # print("Size after pooling: {}".format(q_c.shape))
-        q_c = torch.tanh(self.second_query_conv(q_c))
-        pos_c = torch.tanh(self.second_doc_conv(pos_c))
+        # q_c = torch.tanh(self.second_query_conv(q_c))
+        # pos_c = torch.tanh(self.second_doc_conv(pos_c))
         # Next, we apply a max-pooling layer to the convolved query matrix.
         q_k = kmax_pooling(q_c, 2, 1)
         pos_k = kmax_pooling(pos_c, 2, 1)
@@ -159,9 +159,10 @@ class CDSSM(nn.Module):
         # dots = torch.mm(q_s, pos_s.transpose(0,1)).diag() 
         # dots = dots / (torch.norm(q_s)*torch.norm(pos_s))  # divide by the norm to make it cosine distance
 
-        all_documents = torch.cat([q_s, pos_s], dim=2)
-        output = torch.tanh(self.concat_sem(all_documents))
-        output = self.dropout(output)
+        output = q_s - pos_s
+        # all_documents = torch.cat([q_s, pos_s], dim=2)
+        # output = torch.tanh(self.concat_sem(all_documents))
+        # output = self.dropout(output)
         # dots is a list as of now, lets convert it to torch variable
         #dots = torch.stack(dots)
 
