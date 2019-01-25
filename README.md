@@ -10,7 +10,7 @@ Be sure to read the paper before continuing, as my implementation has begun to d
 ### Relevant Files
 A lot of these evidences have been preprocessed into pickle format; the following files / parameters are useful to speed up compute / training time.
 
-- claims_dict.pkl is used to get a mapping of claims to preprocessed representations, similarly.
+- __claims_dict.pkl__ is used to get a mapping of claims to preprocessed representations, similarly.
 - __feature_encoder.pkl__ and __encoder.pkl__ are used to preprocess text on the fly. They contain a mapping of the trigrams to one-hot vectors, and characters to trigrams respectively. Make sure you have these.
 - The __data__ folder contains all data input needed to run the documents.
 
