@@ -25,10 +25,10 @@ cp -r /usr/users/mnadeem/CDSSM_github/data/ .
 
 To run: `python3 clsm_pytorch.py --data data/large ARGS`
 
-Speedups:
-- Running it with the --sparse-evidences flag: this loads a dictionary of preprocessed matricies rather than building it on runtime; that speeds up training significantly.
+### Speedups
+- Running it with the _--sparse-evidences_ flag: this loads a dictionary of preprocessed matricies rather than building it on runtime; that speeds up training significantly.
 - claims_dict.pkl is used to get a mapping of claims to preprocessed representations, similarly.
 
-Notes:
+### Notes:
 - I normally run it on a Titan X, and each 2% of the batch takes 20-30s, or around 16 minutes per epoch.
 - I normally use 1 GPU, and haven't noticed a performance speedup with several GPUs.
