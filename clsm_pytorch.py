@@ -49,8 +49,8 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, help="Number of queries per batch.", default=10)
     parser.add_argument("--model", help="Loading a pretrained model.", default=None)
     parser.add_argument("--data-sampling", type=int, help="Number of examples per query.", default=3)
-    parser.add_argument("--no-randomize", default=True, action="store_false")
-    parser.add_argument("--learning-rate", type=float, help="Learning rate for model.", default=1e-3)
+    parser.add_argument("--no-randomize", default=True, action="store_false", help="Disables randomly selecting documents from the data loader.")
+    parser.add_argument("--learning-rate", type=float, help="Learning rate for model.", default=1e-4)
     parser.add_argument("--epochs", type=int, help="Number of epochs to learn for.", default=15)
     parser.add_argument("--data", help="Folder dataset to load file from.", default="data/large")
     parser.add_argument("--print", default=False, action="store_true", help="Whether to print predicted labels or not.")
@@ -72,7 +72,7 @@ def run(args, train, sparse_evidences, claims_dict):
     logger = Logger('./logs/{}'.format(time.localtime()))
 
     if MODEL:
-        print("TEMPORARY change to loading!")
+        print("Loading pretrained model...")
         model = torch.load(MODEL)
         model.load_state_dict(torch.load(MODEL).state_dict())
     else:
@@ -95,6 +95,8 @@ def run(args, train, sparse_evidences, claims_dict):
         # model.load_state_dict(torch.load(MODEL).state_dict())
 
     print("Created dataset...")
+
+    # use an 80/20 train/validate split!
     train_size = int(len(train) * 0.80)
     #test = int(len(train) * 0.5)
     train_dataset = pytorch_data_loader.WikiDataset(train[:train_size], claims_dict, data_sampling=DATA_SAMPLING, sparse_evidences=sparse_evidences, randomize=RANDOMIZE) 

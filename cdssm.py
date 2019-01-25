@@ -56,8 +56,7 @@ class CDSSM(nn.Module):
         # self.second_doc_sem = nn.Linear(L, L)
 
         # dropout for regularization
-        self.dropout = nn.Dropout(0.3)
-        self.dropout = nn.Dropout(0.3)
+        self.dropout = nn.Dropout(0.4)
         print("Using 30% dropout with an extra conv!")
 
         # layers for docs
