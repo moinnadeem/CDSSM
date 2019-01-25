@@ -23,6 +23,12 @@ cp /usr/users/mnadeem/CDSSM_github/encoder.pkl .
 cp -r /usr/users/mnadeem/CDSSM_github/data/ .
 ```
 
+Create the following folders: `models` and `predicted_labels`:
+```
+mkdir models
+mkdir predicted_labels
+```
+
 To run: `python3 clsm_pytorch.py --data data/large ARGS`
 
 ### Speedups
