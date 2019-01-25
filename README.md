@@ -14,6 +14,17 @@ A lot of these evidences have been preprocessed into pickle format; the followin
 - __feature_encoder.pkl__ and __encoder.pkl__ are used to preprocess text on the fly. They contain a mapping of the trigrams to one-hot vectors, and characters to trigrams respectively. Make sure you have these.
 - The __data__ folder contains all data input needed to run the documents.
 
+These documents are stored in _/usr/users/mnadeem/CDSSM_github_. The following commands should be able to copy them locally:
+
+```
+cp /usr/users/mnadeem/CDSSM_github/claims_dict.pkl .
+cp /usr/users/mnadeem/CDSSM_github/feature_encoder.pkl .
+cp /usr/users/mnadeem/CDSSM_github/encoder.pkl .
+cp -r /usr/users/mnadeem/CDSSM_github/data/ .
+```
+
+To run: `python3 clsm_pytorch.py --data data/large ARGS`
+
 Speedups:
 - Running it with the --sparse-evidences flag: this loads a dictionary of preprocessed matricies rather than building it on runtime; that speeds up training significantly.
 - claims_dict.pkl is used to get a mapping of claims to preprocessed representations, similarly.
