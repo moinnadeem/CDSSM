@@ -23,7 +23,8 @@ WORD_DEPTH = 29244 # See equation (1).
 # WORD_DEPTH = 1000
 CONV_DIM = 1024
 K = 300 # Dimensionality of the max-pooling layer. See section 3.4.
-L = 128 # Dimensionality of latent semantic space. See section 3.5.
+H = 32 # Dimensionality of the max-pooling layer. See section 3.4.
+L = 32 # Dimensionality of latent semantic space. See section 3.5.
 J = 4 # Number of random unclicked documents serving as negative examples for a query. See section 4.
 FILTER_LENGTH = 3 # We only consider one time step for convolutions.
 
@@ -34,21 +35,23 @@ def kmax_pooling(x, dim, k):
     return x.gather(dim, index)
 
 class CDSSM(nn.Module):
-    def __init__(self):
+    def __init__(self, wordvecs):
         super(CDSSM, self).__init__()
+        self.emb = nn.Embedding.from_pretrained(wordvecs, freeze=True)
+
         # layers for query
-        self.query_conv = nn.Conv1d(WORD_DEPTH, CONV_DIM, FILTER_LENGTH)
+        self.query_conv = nn.Conv1d(K, H, FILTER_LENGTH)
         # adding Xavier-He initialization
         torch.nn.init.xavier_uniform_(self.query_conv.weight)
         
         # adding a second convolutional layer
-        self.second_query_conv = nn.Conv1d(CONV_DIM, K, FILTER_LENGTH)
-        torch.nn.init.xavier_uniform_(self.second_query_conv.weight)
+        # self.second_query_conv = nn.Conv1d(CONV_DIM, K, FILTER_LENGTH)
+        # torch.nn.init.xavier_uniform_(self.second_query_conv.weight)
 
         self.max_pool = nn.MaxPool1d(3)
 
         # learn the semantic representation
-        self.query_sem = nn.Linear(K, L)
+        self.query_sem = nn.Linear(H, L)
         torch.nn.init.xavier_uniform_(self.query_sem.weight)
 
         # adding a hidden layer
@@ -56,17 +59,17 @@ class CDSSM(nn.Module):
         # self.second_doc_sem = nn.Linear(L, L)
 
         # dropout for regularization
-        self.dropout = nn.Dropout(0.4)
-        print("Using 30% dropout with an extra conv!")
+        self.dropout = nn.Dropout(0.5)
+        # print("Using 30% dropout with an extra conv!")
 
         # layers for docs
-        self.doc_conv = nn.Conv1d(WORD_DEPTH, CONV_DIM, FILTER_LENGTH)
+        self.doc_conv = nn.Conv1d(K, H, FILTER_LENGTH)
         torch.nn.init.xavier_uniform_(self.doc_conv.weight)
 
-        self.second_doc_conv = nn.Conv1d(CONV_DIM, K, FILTER_LENGTH)
-        torch.nn.init.xavier_uniform_(self.second_doc_conv.weight)
+        # self.second_doc_conv = nn.Conv1d(CONV_DIM, K, FILTER_LENGTH)
+        # torch.nn.init.xavier_uniform_(self.second_doc_conv.weight)
 
-        self.doc_sem = nn.Linear(K, L)
+        self.doc_sem = nn.Linear(H, L)
         torch.nn.init.xavier_uniform_(self.doc_sem.weight)
 
         # learning gamma
@@ -74,8 +77,8 @@ class CDSSM(nn.Module):
         # torch.nn.init.xavier_uniform_(self.learn_gamma.weight)
 
         # adding batch norm
-        self.q_norm = nn.BatchNorm1d(WORD_DEPTH)
-        self.doc_norm = nn.BatchNorm1d(WORD_DEPTH)
+        self.q_norm = nn.BatchNorm1d(K)
+        self.doc_norm = nn.BatchNorm1d(K)
         
         # adding q_norm
         self.sem_q_norm = nn.BatchNorm1d(1)
@@ -84,9 +87,16 @@ class CDSSM(nn.Module):
         self.concat_sem = nn.Linear(2*L, 2)
         torch.nn.init.xavier_uniform_(self.concat_sem.weight)
 
-        self.softmax = nn.LogSoftmax()
+        self.softmax = nn.LogSoftmax(dim=2)
 
     def forward(self, q, pos):
+        orig_q = q
+        orig_pos = pos
+        # mask_q = (orig_q > 0).float()
+        # mask_pos = (orig_pos > 0).float()
+
+        q = self.emb(q)
+        pos = self.emb(pos)
         # Query model. The paper uses separate neural nets for queries and documents (see section 5.2).
         # To make it compatible with Conv layer we reshape it to: (batch_size, WORD_DEPTH, query_len)
         # print("Query initial shape: {}".format(q.shape))
@@ -111,8 +121,8 @@ class CDSSM(nn.Module):
         q_c = self.max_pool(q_c)
         pos_c = self.max_pool(pos_c)
 
-        q_c = torch.tanh(self.second_query_conv(q_c))
-        pos_c = torch.tanh(self.second_doc_conv(pos_c))
+        # q_c = torch.tanh(self.second_query_conv(q_c))
+        # pos_c = torch.tanh(self.second_doc_conv(pos_c))
         # Next, we apply a max-pooling layer to the convolved query matrix.
         q_k = kmax_pooling(q_c, 2, 1)
         pos_k = kmax_pooling(pos_c, 2, 1)

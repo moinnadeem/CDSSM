@@ -17,32 +17,97 @@ def tokenize_helper(inp):
     print(inp)
     return tokenize_claim(inp[0], inp[1], inp[2])
 
+class Vocab:
+    def __init__(self, vocab_path):
+        word2idx = {}
+        idx2word = []
+        with open(vocab_path, 'r') as fp:
+            for idx, line in enumerate(fp):
+                word = line.strip()
+                word2idx[word] = idx
+                idx2word.append(word)
+
+        self.word2idx = word2idx
+        self.idx2word = idx2word
+
+        self.unk_word = '<UNK>'
+        self.unk_idx = self.word2idx[self.unk_word]
+
+        self.pad_word = '<PAD>'
+        self.pad_idx = self.word2idx[self.pad_word]
+
+    def i2w(self, idx):
+        assert idx < len(self.idx2word)
+        return self.idx2word[idx]
+
+    def w2i(self, word):
+        if word in self.word2idx:
+            return self.word2idx[word]
+        else:
+            return self.unk_idx
+
+    def contains(self, word):
+        return (word in self.word2idx)
+
+    def add(self, word):
+        if word in self.word2idx:
+            return self.word2idx[word]
+
+        new_idx = len(self.idx2word)
+        self.word2idx[word] = new_idx
+        self.idx2word.append(word)
+        return new_idx
+
+    def map(self, words):
+        return [self.w2i(word) for word in words]
+
 class ClaimEncoder(object):
     def __init__(self):
         self.feature_encoder = joblib.load("feature_encoder.pkl")
         self.encoder = joblib.load("encoder.pkl")
             
-    def tokenize_claim(self, c):
-        """
-        Input: a string that represents a single claim
-        Output: a list of 3x|vocabulary| arrays that has a 1 where the letter-gram exists.
-        """
-        encoded_vector = []
-        c = preprocess_article_name(c)
-        c = "! {} !".format(c)
-        for ngram in nltk.ngrams(nltk.word_tokenize(c), 3):
-            arr = sparse.lil_matrix((3, len(self.encoder.__dict__['classes_'])))
-            for idx, word in enumerate(ngram):
-                for letter_gram in nltk.ngrams("#" + word + "#", 3):
-                    s = "".join(letter_gram)
-                    if s in self.feature_encoder:
-                        letter_idx = self.feature_encoder[s]
-                    else:
-                        # note: lowercase OOV is actually in the dictionary, uppercase OOV is not in vocab.
-                        letter_idx = self.feature_encoder['OOV'] 
-                    arr[idx, letter_idx] = 1
-            encoded_vector.append(arr)
-        return encoded_vector
+    def _word_tokenize(self, text):
+        keep_quote = ["'m", "'re", "'ll", "'d", "'s", "'ve", "''"]
+        toks = []
+        for tok in nltk.word_tokenize(text):
+            if tok.startswith("'") and len(tok) > 1 and tok not in keep_quote:
+                toks.append("'")
+                toks.append(tok[1:])
+            else:
+                toks.append(tok)
+
+        return toks
+
+    def tokenize_claim(self, c, sparse=False, max_seq_len=50, vocab=None):
+        if not sparse:
+            toks = vocab.map(self._word_tokenize(c.lower()))
+            if len(toks) >= max_seq_len:
+                toks = toks[:max_seq_len]
+            else:
+                toks = toks + [0] * (max_seq_len - len(toks))
+
+            return toks
+        else:
+            """
+            Input: a string that represents a single claim
+            Output: a list of 3x|vocabulary| arrays that has a 1 where the letter-gram exists.
+            """
+            encoded_vector = []
+            c = preprocess_article_name(c)
+            c = "! {} !".format(c)
+            for ngram in nltk.ngrams(nltk.word_tokenize(c), 3):
+                arr = sparse.lil_matrix((3, len(self.encoder.__dict__['classes_'])))
+                for idx, word in enumerate(ngram):
+                    for letter_gram in nltk.ngrams("#" + word + "#", 3):
+                        s = "".join(letter_gram)
+                        if s in self.feature_encoder:
+                            letter_idx = self.feature_encoder[s]
+                        else:
+                            # note: lowercase OOV is actually in the dictionary, uppercase OOV is not in vocab.
+                            letter_idx = self.feature_encoder['OOV'] 
+                        arr[idx, letter_idx] = 1
+                encoded_vector.append(arr)
+            return encoded_vector
     
     def create_encodings(self, claims, train_dict, write_to_file=False):
         processed_claims = generate_all_tokens(claims)

@@ -114,18 +114,18 @@ class PadCollate:
             evidences_text.extend(item[3])
             labels.extend(item[4])
 
-        batched_items = []
+        # batched_items = []
 
-        for tensor in [claims_tensors, evidences_tensors]:
-            # find longest sequence
-            max_len = max(map(lambda x: x.shape[self.dim], tensor))
+        # for tensor in [claims_tensors, evidences_tensors]:
+            # # find longest sequence
+            # max_len = max(map(lambda x: x.shape[self.dim], tensor))
 
-            # pad according to max_len
-            batched_items.append(list(map(lambda x: pad_tensor(x, pad=max_len, dim=self.dim), tensor)))
+            # # pad according to max_len
+            # batched_items.append(list(map(lambda x: pad_tensor(x, pad=max_len, dim=self.dim), tensor)))
 
         # stack all
-        claims_tensors = torch.stack(batched_items[0], dim=0).cuda()
-        evidences_tensors = torch.stack(batched_items[1], dim=0).cuda()
+        claims_tensors = torch.stack(claims_tensors, dim=0).cuda()
+        evidences_tensors = torch.stack(evidences_tensors, dim=0).cuda()
         labels = torch.tensor(labels, dtype=torch.float).cuda()
         return [claims_tensors, claims_text, evidences_tensors, evidences_text, labels] 
 
@@ -136,7 +136,7 @@ class WikiDataset(Dataset):
     """
     Generates data with batch size of 1 sample for the purposes of training our model.
     """
-    def __init__(self, data, claims_dict, data_sampling=10, batch_size=32, split=None, randomize=True, testFile="train.jsonl", sparse_evidences=None):
+    def __init__(self, data, claims_dict, vocab_path, data_sampling=10, batch_size=32, split=None, randomize=True, testFile="train.jsonl", sparse_evidences=None):
         """
             Sets the initial arguments and creates
             an indicies array to randomize the dataset
@@ -160,6 +160,7 @@ class WikiDataset(Dataset):
         self.batch_size = batch_size
         self.collate_fn = PadCollate()
         _, _, _, _, self.claim_to_article = utils.extract_fever_jsonl_data(testFile)
+        self.vocab = utils.Vocab(vocab_path)
         
     def __len__(self):
         return len(self.data)
@@ -172,12 +173,13 @@ class WikiDataset(Dataset):
         item_index = index 
         
         d = self.data[item_index]  # get training item 
-        #claim = utils.preprocess_article_name(d['claim'])  # preprocess the claim
-        #claim = self.encoder.tokenize_claim(claim)
-        #claim = sparse.vstack(claim).toarray()  # turn it into a array
-        claim = self.claims_dict[d['claim']]
-        claim = claim.toarray()
-        claim = torch.from_numpy(claim).cuda().float()
+        claim = utils.preprocess_article_name(d['claim'])  # preprocess the claim
+        claim = self.encoder.tokenize_claim(claim, sparse=False, vocab=self.vocab)
+        claim = torch.LongTensor(claim).cuda()
+        # claim = sparse.vstack(claim).toarray()  # turn it into a array
+        # claim = self.claims_dict[d['claim']]
+        # claim = claim.toarray()
+        # claim = torch.from_numpy(claim).cuda().float()
         claim_text = d['claim']
         #claim = sparse.vstack(self.encoder.tokenize_claim(utils.preprocess_article_name(d['claim']))).toarray()
 
@@ -187,7 +189,8 @@ class WikiDataset(Dataset):
         evidence_text = []
         labels = []
 
-        num_positive_articles = min(len(self.claim_to_article[d['claim']]), 4)  # get all positive articles 
+        # num_positive_articles = min(len(self.claim_to_article[d['claim']]), 4)  # get all positive articles 
+        num_positive_articles = len(self.claim_to_article[d['claim']])
         for idx in range(num_positive_articles):
             processed = self.claim_to_article[d['claim']][idx]
 
@@ -198,11 +201,13 @@ class WikiDataset(Dataset):
                     print("Claim: {}, evidence {} is missing!".format(d['claim'], processed)) 
                     return self.get_item(index+1)
             else:
-                evidence = self.encoder.tokenize_claim(processed)
-                evidence = sparse.vstack(evidence)
+                # evidence = self.encoder.tokenize_claim(processed)
+                # evidence = sparse.vstack(evidence)
+                evidence = self.encoder.tokenize_claim(processed, sparse=False, vocab=self.vocab, max_seq_len=150)
 
-            evidence = evidence.toarray()
-            evidence = torch.from_numpy(evidence).cuda().float()
+            # evidence = evidence.toarray()
+            # evidence = torch.from_numpy(evidence).cuda().float()
+            evidence = torch.LongTensor(evidence).cuda()
 
             evidence_text.append(processed)
             evidence_tensors.append(evidence)
@@ -222,7 +227,8 @@ class WikiDataset(Dataset):
             #evidence = articles_dict[processed]
 
             if processed=="":  # handle empty string case
-                evidence = sparse.coo_matrix((10, 29244))  # randomly chosen shape for array
+                # evidence = sparse.coo_matrix((10, 29244))  # randomly chosen shape for array
+                evidence = []
             else:
                 if self.evidence_to_sparse:
                     if processed in self.evidence_to_sparse:
@@ -232,13 +238,16 @@ class WikiDataset(Dataset):
                         raise Exception("You fucked up somewhere")
 
                 else: 
-                    evidence = self.encoder.tokenize_claim(processed)
-                    if len(evidence)>0:
-                        evidence = sparse.vstack(evidence)
+                    evidence = self.encoder.tokenize_claim(processed, sparse=False, vocab=self.vocab, max_seq_len=150)
+                    # evidence = self.encoder.tokenize_claim(processed)
+                    # if len(evidence)>0:
+                        # evidence = sparse.vstack(evidence)
 
-            if evidence.shape[0]>0:
-                evidence = evidence.toarray()
-                evidence = torch.from_numpy(evidence).cuda().float()
+            # if evidence.shape[0]>0:
+            if len(evidence) > 0:
+                # evidence = evidence.toarray()
+                # evidence = torch.from_numpy(evidence).cuda().float()
+                evidence = torch.LongTensor(evidence).cuda()
                 evidence_tensors.append(evidence)
                 evidence_text.append(processed)
 
@@ -250,8 +259,9 @@ class WikiDataset(Dataset):
                 else:
                     labels.append([1,0])
             else:
-                print(d['claim'], e)
-                raise Exception("SKipping append")
+                # print(d['claim'], e)
+                # raise Exception("SKipping append")
+                pass
 
         #claim = claim.expand(evidences.shape[0], claim.shape[0], claim.shape[1])
         # claims_tensors = self.collate_fn(claims_tensors)
@@ -297,7 +307,7 @@ def stack_uneven(arrays, fill_value=0.):
     return result
 
 class ValWikiDataset(Dataset):
-    def __init__(self, data, claims_dict, batch_size=1, split=None, testFile="train.jsonl", sparse_evidences=None):
+    def __init__(self, data, claims_dict, vocab_path, batch_size=1, split=None, testFile="train.jsonl", sparse_evidences=None):
         """
         Initializes the class.
         """
@@ -320,6 +330,7 @@ class ValWikiDataset(Dataset):
         self.claims_dict = claims_dict
         self.batch_size = batch_size
         _, _, _, _, self.claim_to_article = utils.extract_fever_jsonl_data(testFile)
+        self.vocab = utils.Vocab(vocab_path)
 
     def __len__(self):
         return (len(self.data)*20)//self.batch_size
@@ -332,9 +343,12 @@ class ValWikiDataset(Dataset):
         evidences_idx = (index*self.batch_size)%20
 
         d = self.data[claim_index]
-        claim = self.claims_dict[d['claim']]
-        claim = claim.toarray()
-        claim = torch.from_numpy(claim).cuda().float()
+        claim = utils.preprocess_article_name(d['claim'])  # preprocess the claim
+        claim = self.encoder.tokenize_claim(claim, sparse=False, vocab=self.vocab)
+        claim = torch.LongTensor(claim).cuda()
+        # claim = self.claims_dict[d['claim']]
+        # claim = claim.toarray()
+        # claim = torch.from_numpy(claim).cuda().float()
         claim_text = d['claim']
 
         claim_tensors = []
@@ -352,8 +366,9 @@ class ValWikiDataset(Dataset):
             processed = utils.preprocess_article_name(e.split("http://wikipedia.org/wiki/")[1])
 
             if processed=="":
-                evidence = sparse.coo_matrix((10, 29244))
-                print("Zero length evidence encountered. Be careful!")
+                # evidence = sparse.coo_matrix((10, 29244))
+                evidence = []
+                # print("Zero length evidence encountered. Be careful!")
             else:
                 if self.evidence_to_sparse:
                     if processed in self.evidence_to_sparse:
@@ -362,13 +377,16 @@ class ValWikiDataset(Dataset):
                         print(e)
                         raise Exception("Some item has not been found in the sparse dataset")
                 else:
-                    evidence = self.encoder.tokenize_claim(processed)
-                    if len(evidence)>0:
-                        evidence = sparse.vstack(evidence)
+                    # evidence = self.encoder.tokenize_claim(processed)
+                    evidence = self.encoder.tokenize_claim(processed, sparse=False, vocab=self.vocab, max_seq_len=150)
+                    # if len(evidence)>0:
+                        # evidence = sparse.vstack(evidence)
 
-            if evidence.shape[0]>0:
-                evidence = evidence.toarray()
-                evidence = torch.from_numpy(evidence).cuda().float()
+            # if evidence.shape[0]>0:
+            if len(evidence) > 0:
+                # evidence = evidence.toarray()
+                # evidence = torch.from_numpy(evidence).cuda().float()
+                evidence = torch.LongTensor(evidence).cuda()
                 evidence_tensors.append(evidence)
                 evidence_text.append(processed)
 
@@ -382,7 +400,8 @@ class ValWikiDataset(Dataset):
                 else:
                     labels.append([1,0])
             else:
-                print(d['claim'], e, "is not positive length!")
+                # print(d['claim'], e, "is not positive length!")
+                pass
 
         return [claim_tensors, claim_texts, evidence_tensors, evidence_text, labels]
 

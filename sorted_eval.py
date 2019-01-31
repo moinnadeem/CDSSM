@@ -10,7 +10,7 @@
 
 import pickle
 from multiprocessing import cpu_count
-from comet_ml import Experiment
+# from comet_ml import Experiment
 import os
 from parallel import DataParallelModel, DataParallelCriterion
 import parallel
@@ -38,6 +38,7 @@ import cdssm
 import pytorch_data_loader
 import argparse
 import utils
+from metrics import calculate_precision, calculate_recall
 
 torch.backends.cudnn.benchmark=True
 nltk.data.path.append('/usr/users/mnadeem/nltk_data/')
@@ -52,6 +53,7 @@ def parse_args():
     parser.add_argument("--model", help="Model to evaluate.") 
     parser.add_argument("--sparse-evidences", default=False, action="store_true")
     parser.add_argument("--print", default=False, action="store_true", help="Whether to print predicted labels or not.")
+    parser.add_argument("--vocab-path", type=str, default='/data/sls/temp/weifang/fact_checking/processed/fever_uncased_40000_vocab.txt')
     return parser.parse_args()
 
 # @monitor("CLSM Test")
@@ -71,7 +73,13 @@ def run():
     if MODEL:
         model = torch.load(MODEL).module
     else:
-        model = cdssm.CDSSM()
+        dirname = os.path.dirname(args.vocab_path)
+        base = os.path.splitext(os.path.basename(args.vocab_path))[0]
+        base = base.rsplit('_', 1)[0]
+        vec_path = os.path.join(dirname, f'{base}_wordvecs.pt')
+        wordvecs = torch.load(vec_path)
+
+        model = cdssm.CDSSM(wordvecs=wordvecs)
         model = model.cuda()
         model = model.to(device)
     if torch.cuda.device_count() > 0:
@@ -79,16 +87,16 @@ def run():
       model = nn.DataParallel(model)
 
     print("Created dataset...")
-    dataset = pytorch_data_loader.ValWikiDataset(test, claims_dict, testFile="shared_task_dev.jsonl", sparse_evidences=sparse_evidences, batch_size=BATCH_SIZE) 
+    dataset = pytorch_data_loader.ValWikiDataset(test, claims_dict, vocab_path=args.vocab_path, testFile="shared_task_dev.jsonl", sparse_evidences=sparse_evidences, batch_size=BATCH_SIZE) 
     dataloader = DataLoader(dataset, num_workers=0, collate_fn=pytorch_data_loader.PadCollate(), shuffle=False)
 
     OUTPUT_FREQ = int((len(dataset))*0.02) 
     
     parameters = {"batch size": BATCH_SIZE, "data": args.data, "model": args.model}
-    experiment = Experiment(api_key="YLsW4AvRTYGxzdDqlWRGCOhee", project_name="clsm", workspace="moinnadeem")
-    experiment.add_tag("test")
-    experiment.log_parameters(parameters)
-    experiment.log_asset("cdssm.py")
+    # experiment = Experiment(api_key="YLsW4AvRTYGxzdDqlWRGCOhee", project_name="clsm", workspace="moinnadeem")
+    # experiment.add_tag("test")
+    # experiment.log_parameters(parameters)
+    # experiment.log_asset("cdssm.py")
 
     true = []
     pred = []
@@ -99,8 +107,10 @@ def run():
 
     recall_intervals = [1,2,5,10,20]
     recall = {}
+    overall_recall = {}
     for i in recall_intervals:
         recall[i] = []
+        overall_recall[i] = []
 
     num_batches = 0
 
@@ -108,8 +118,10 @@ def run():
     beginning_time = time.time() 
     criterion = torch.nn.NLLLoss()
 
-    with experiment.test():
-        for batch_num, inputs in enumerate(dataloader):
+    # with experiment.test():
+    with torch.no_grad():
+        pbar = tqdm(dataloader)
+        for batch_num, inputs in enumerate(pbar):
             num_batches += 1
             claims_tensors, claims_text, evidences_tensors, evidences_text, labels = inputs  
 
@@ -154,10 +166,11 @@ def run():
 
             for k in recall_intervals:
                 if len(relevant_evidences)==0:
-                    # recall[k].append(0)
-                    pass
+                    overall_recall[k].append(0.)
                 else:
-                    recall[k].append(calculate_recall(retrieved_evidences, relevant_evidences, k=k))
+                    rec_k = calculate_recall(retrieved_evidences, relevant_evidences, k=k)
+                    recall[k].append(rec_k)
+                    overall_recall[k].append(rec_k)
 
             if len(relevant_evidences)==0:
                 #test_running_recall_at_ten += 0.0
@@ -177,41 +190,32 @@ def run():
 
             test_running_accuracy += accuracy.item()
 
-            if batch_num % OUTPUT_FREQ==0 and batch_num>0:
-                elapsed_time = time.time() - beginning_time
-                print("[{}:{:3f}s]: accuracy: {}, loss: {}, recall@20: {}".format(batch_num / len(dataloader), elapsed_time, test_running_accuracy / OUTPUT_FREQ, test_running_loss / OUTPUT_FREQ, test_running_recall_at_ten / OUTPUT_FREQ))
-                for k in sorted(recall.keys()):
-                    v = recall[k]
-                    print("recall@{}: {}".format(k, np.mean(v)))
+            # if batch_num % OUTPUT_FREQ==0 and batch_num>0:
+                # elapsed_time = time.time() - beginning_time
+                # print("[{}:{:3f}s]: accuracy: {}, loss: {}, recall@20: {}".format(batch_num / len(dataloader), elapsed_time, test_running_accuracy / OUTPUT_FREQ, test_running_loss / OUTPUT_FREQ, test_running_recall_at_ten / OUTPUT_FREQ))
+                # for k in sorted(recall.keys()):
+                    # v = recall[k]
+                    # print("recall@{}: {}".format(k, np.mean(v)))
 
-                # 1. Log scalar values (scalar summary)
-                info = { 'test_accuracy': test_running_accuracy/OUTPUT_FREQ }
+                # # 1. Log scalar values (scalar summary)
+                # info = { 'test_accuracy': test_running_accuracy/OUTPUT_FREQ }
 
-                true = [int(i) for i in true]
-                pred = [int(i) for i in pred]
-                print(classification_report(true, pred))
+                # true = [int(i) for i in true]
+                # pred = [int(i) for i in pred]
+                # print(classification_report(true, pred))
 
-                for tag, value in info.items():
-                   experiment.log_metric(tag, value, step=batch_num)
+                # # for tag, value in info.items():
+                   # # experiment.log_metric(tag, value, step=batch_num)
 
-                # 2. Log values and gradients of the parameters (histogram summary)
-                # for tag, value in model.named_parameters():
-                #     tag = tag.replace('.', '/')
-                #     logger.histo_summary(tag, value.data.cpu().numpy(), batch_num+1)
+                # # 2. Log values and gradients of the parameters (histogram summary)
+                # # for tag, value in model.named_parameters():
+                # #     tag = tag.replace('.', '/')
+                # #     logger.histo_summary(tag, value.data.cpu().numpy(), batch_num+1)
 
-                test_running_accuracy = 0.0
-                test_running_recall_at_ten = 0.0
-                test_running_loss = 0.0
-                beginning_time = time.time()
-
-        # del claims_tensors
-        # del claims_text
-        # del evidences_tensors
-        # del evidences_text
-        # del labels 
-        # del y
-        # del y_pred
-        # torch.cuda.empty_cache()
+                # test_running_accuracy = 0.0
+                # test_running_recall_at_ten = 0.0
+                # test_running_loss = 0.0
+                # beginning_time = time.time()
 
     true = [int(i) for i in true]
     pred = [int(i) for i in pred]
@@ -219,38 +223,21 @@ def run():
     print("Final accuracy: {}".format(final_accuracy))
     print(classification_report(true, pred))
 
-    for k, v in recall.items():
-        print("Recall@{}: {}".format(k, np.mean(v)))
+    recall_at_k = [(k, np.mean(v)) for k, v in recall.items()]
+    overall_recall_at_k = [(k, np.mean(v)) for k, v in overall_recall.items()]
+    print("           {} | {}".format("nm_only", "overall"))
+    for (k, v1), (_, v2) in zip(recall_at_k, overall_recall_at_k):
+        print("Recall@{:>2}: {:.5f} | {:.5f}".format(k, v1, v2))
 
-    filename = "predicted_labels/predicted_labels"
-    for key, value in parameters.items():
-        key = key.replace(" ", "_")
-        key = key.replace("/", "_")
-        if type(value)==str:
-            value = value.replace("/", "_")
-        filename += "_{}-{}".format(key, value)
+    # filename = "predicted_labels/predicted_labels"
+    # for key, value in parameters.items():
+        # key = key.replace(" ", "_")
+        # key = key.replace("/", "_")
+        # if type(value)==str:
+            # value = value.replace("/", "_")
+        # filename += "_{}-{}".format(key, value)
 
-    joblib.dump({"true": true, "pred": pred}, filename)
-
-def calculate_precision(retrieved, relevant, k=None):
-    """
-        retrieved: a list of sorted documents that were retrieved
-        relevant: a list of sorted documents that are relevant
-        k: how many documents to consider, all by default.
-    """
-    if k==None:
-        k = len(retrieved)
-    return len(set(retrieved[:k]).intersection(set(relevant))) / len(set(retrieved))
-
-def calculate_recall(retrieved, relevant, k=None):
-    """
-        retrieved: a list of sorted documents that were retrieved
-        relevant: a list of sorted documents that are relevant
-        k: how many documents to consider, all by default.
-    """
-    if k==None:
-        k = len(retrieved)
-    return len(set(retrieved[:k]).intersection(set(relevant))) / len(set(relevant))
+    # joblib.dump({"true": true, "pred": pred}, filename)
 
 if __name__=="__main__":
     args = parse_args()

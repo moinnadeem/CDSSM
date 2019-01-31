@@ -14,7 +14,7 @@ import pickle
 import time
 from multiprocessing import cpu_count
 from sys import argv
-from comet_ml import Experiment
+# from comet_ml import Experiment
 from parallel import DataParallelModel, DataParallelCriterion
 import parallel
 
@@ -40,6 +40,7 @@ import cdssm
 import pytorch_data_loader
 import utils
 from logger import Logger
+from metrics import calculate_precision, calculate_recall
 
 torch.backends.cudnn.benchmark=True
 nltk.data.path.append('/usr/users/mnadeem/nltk_data/')
@@ -55,6 +56,9 @@ def parse_args():
     parser.add_argument("--data", help="Folder dataset to load file from.", default="data/large")
     parser.add_argument("--print", default=False, action="store_true", help="Whether to print predicted labels or not.")
     parser.add_argument("--sparse-evidences", default=False, action="store_true")
+    parser.add_argument("--vocab-path", type=str, default='/data/sls/temp/weifang/fact_checking/processed/fever_uncased_40000_vocab.txt')
+    parser.add_argument("--eval-train", action="store_true")
+    parser.add_argument("--eval-test", action="store_true")
     return parser.parse_args()
 
 def run(args, train, sparse_evidences, claims_dict):
@@ -71,12 +75,18 @@ def run(args, train, sparse_evidences, claims_dict):
 
     logger = Logger('./logs/{}'.format(time.localtime()))
 
+    dirname = os.path.dirname(args.vocab_path)
+    base = os.path.splitext(os.path.basename(args.vocab_path))[0]
+    base = base.rsplit('_', 1)[0]
+    vec_path = os.path.join(dirname, f'{base}_wordvecs.pt')
+    wordvecs = torch.load(vec_path)
+
     if MODEL:
         print("Loading pretrained model...")
         model = torch.load(MODEL)
         model.load_state_dict(torch.load(MODEL).state_dict())
     else:
-        model = cdssm.CDSSM()
+        model = cdssm.CDSSM(wordvecs=wordvecs)
         model = model.cuda()
         model = model.to(device)
 
@@ -88,6 +98,7 @@ def run(args, train, sparse_evidences, claims_dict):
       print("Let's use", torch.cuda.device_count(), "GPU(s)!")
       model = nn.DataParallel(model)
     
+    print(model)
     print("Created model with {:,} parameters.".format(putils.count_parameters(model)))
 
     # if MODEL:
@@ -99,11 +110,22 @@ def run(args, train, sparse_evidences, claims_dict):
     # use an 80/20 train/validate split!
     train_size = int(len(train) * 0.80)
     #test = int(len(train) * 0.5)
-    train_dataset = pytorch_data_loader.WikiDataset(train[:train_size], claims_dict, data_sampling=DATA_SAMPLING, sparse_evidences=sparse_evidences, randomize=RANDOMIZE) 
-    val_dataset = pytorch_data_loader.WikiDataset(train[train_size:], claims_dict, data_sampling=DATA_SAMPLING, sparse_evidences=sparse_evidences, randomize=RANDOMIZE) 
+    train_dataset = pytorch_data_loader.WikiDataset(train[:train_size], claims_dict, vocab_path=args.vocab_path, data_sampling=DATA_SAMPLING, sparse_evidences=sparse_evidences, randomize=RANDOMIZE) 
+    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=0, shuffle=True, drop_last=True, collate_fn=pytorch_data_loader.PadCollate())
 
-    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=0, shuffle=True, collate_fn=pytorch_data_loader.PadCollate())
-    val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=0, shuffle=True, collate_fn=pytorch_data_loader.PadCollate())
+    val_dataset = pytorch_data_loader.ValWikiDataset(train[train_size:], claims_dict, vocab_path=args.vocab_path, sparse_evidences=sparse_evidences, batch_size=20) 
+    val_dataloader = DataLoader(val_dataset, batch_size=1, num_workers=0, shuffle=False, collate_fn=pytorch_data_loader.PadCollate())
+
+    if args.eval_train:
+        train_eval_dataset = pytorch_data_loader.ValWikiDataset(train[:train_size], claims_dict, vocab_path=args.vocab_path, sparse_evidences=sparse_evidences, batch_size=20) 
+
+        train_eval_dataloader = DataLoader(train_eval_dataset, batch_size=1, num_workers=0, shuffle=False, collate_fn=pytorch_data_loader.PadCollate())
+
+    if args.eval_test:
+        fname = os.path.join("data/validation","train.pkl")
+        test = joblib.load(fname)
+        test_dataset = pytorch_data_loader.ValWikiDataset(test, claims_dict, vocab_path=args.vocab_path, testFile="shared_task_dev.jsonl", sparse_evidences=sparse_evidences, batch_size=20) 
+        test_dataloader = DataLoader(test_dataset, batch_size=1, num_workers=0, collate_fn=pytorch_data_loader.PadCollate(), shuffle=False)
 
     # Loss and optimizer
     criterion = torch.nn.NLLLoss()
@@ -111,15 +133,15 @@ def run(args, train, sparse_evidences, claims_dict):
     # if torch.cuda.device_count() > 0:
         # print("Let's parallelize the backward pass...")
         # criterion = DataParallelCriterion(criterion)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-2)
 
-    OUTPUT_FREQ = max(int((len(train_dataset)/BATCH_SIZE)*0.02), 20) 
-    parameters = {"batch size": BATCH_SIZE, "epochs": NUM_EPOCHS, "learning rate": LEARNING_RATE, "optimizer": optimizer.__class__.__name__, "loss": criterion.__class__.__name__, "training size": train_size, "data sampling rate": DATA_SAMPLING, "data": args.data, "sparse_evidences": args.sparse_evidences, "randomize": RANDOMIZE, "model": MODEL}
-    experiment = Experiment(api_key="YLsW4AvRTYGxzdDqlWRGCOhee", project_name="clsm", workspace="moinnadeem")
-    experiment.add_tag("train")
-    experiment.log_asset("cdssm.py")
-    experiment.log_dataset_info(name=args.data)
-    experiment.log_parameters(parameters)
+    OUTPUT_FREQ = max(int((len(train_dataset)/BATCH_SIZE)*0.0025), 20) 
+    parameters = {"batch": BATCH_SIZE, "ep": NUM_EPOCHS, "lr": LEARNING_RATE, "opt": optimizer.__class__.__name__, "loss": criterion.__class__.__name__, "train size": train_size, "samp": DATA_SAMPLING, "data": args.data, "model": MODEL}
+    # experiment = Experiment(api_key="YLsW4AvRTYGxzdDqlWRGCOhee", project_name="clsm", workspace="moinnadeem")
+    # experiment.add_tag("train")
+    # experiment.log_asset("cdssm.py")
+    # experiment.log_dataset_info(name=args.data)
+    # experiment.log_parameters(parameters)
 
     model_checkpoint_dir = "models/saved_model" 
     for key, value in parameters.items():
@@ -128,9 +150,16 @@ def run(args, train, sparse_evidences, claims_dict):
         if key!="model":
             model_checkpoint_dir += "_{}-{}".format(key.replace(" ", "_"), value)
 
+    model_checkpoint_dir += '_' + str(time.time())
+
+    if not os.path.isdir(model_checkpoint_dir):
+        print("Created directory '" + model_checkpoint_dir + "'")
+        os.makedirs(model_checkpoint_dir)
+
     print("Training...")
     beginning_time = time.time() 
-    best_loss = torch.tensor(float("inf"), dtype=torch.float)  # begin loss at infinity
+    # best_loss = torch.tensor(float("inf"), dtype=torch.float)  # begin loss at infinity
+    best_metric = 0.
 
     for epoch in range(NUM_EPOCHS):
         beginning_time = time.time()
@@ -138,10 +167,14 @@ def run(args, train, sparse_evidences, claims_dict):
         train_running_loss = 0.0
         train_running_accuracy = 0.0
         model.train()
-        experiment.log_current_epoch(epoch)
+        # experiment.log_current_epoch(epoch)
 
-        with experiment.train():
-            for train_batch_num, inputs in enumerate(train_dataloader):
+        # with experiment.train():
+        if True:
+            print('-'*80)
+            pbar = tqdm(train_dataloader)
+            # print('Epoch {}'.format(epoch+1))
+            for train_batch_num, inputs in enumerate(pbar):
                 claims_tensors, claims_text, evidences_tensors, evidences_text, labels = inputs  
 
                 claims_tensors = claims_tensors.cuda()
@@ -151,6 +184,7 @@ def run(args, train, sparse_evidences, claims_dict):
                 #evidences = evidences.to(device).float()
                 #labels = labels.to(device)
 
+                optimizer.zero_grad()
                 y_pred = model(claims_tensors, evidences_tensors)
 
                 y = (labels)
@@ -183,122 +217,161 @@ def run(args, train, sparse_evidences, claims_dict):
                     elapsed_time = time.time() - beginning_time
                     binary_y = torch.max(y, 1)[1]
                     binary_pred = torch.max(y_pred, 1)[1]
-                    print("[{}:{}:{:3f}s] training loss: {}, training accuracy: {}, training recall: {}".format(epoch, train_batch_num / (len(train_dataset)/BATCH_SIZE), elapsed_time, train_running_loss/OUTPUT_FREQ, train_running_accuracy/OUTPUT_FREQ, recall_score(binary_y.cpu().detach().numpy(), binary_pred.cpu().detach().numpy())))
+                    pbar.set_description("[Epoch {:>2}] loss: {:.3f}, acc: {:.3f}".format(epoch+1, train_running_loss/OUTPUT_FREQ, train_running_accuracy/OUTPUT_FREQ))
+                    # print("[{}:{}:{:3f}s] training loss: {}, training accuracy: {}, training recall: {}".format(epoch, train_batch_num / (len(train_dataset)/BATCH_SIZE), elapsed_time, train_running_loss/OUTPUT_FREQ, train_running_accuracy/OUTPUT_FREQ, recall_score(binary_y.cpu().detach().numpy(), binary_pred.cpu().detach().numpy())))
 
                     # 1. Log scalar values (scalar summary)
                     info = { 'train_loss': train_running_loss/OUTPUT_FREQ, 'train_accuracy': train_running_accuracy/OUTPUT_FREQ }
 
                     for tag, value in info.items():
-                       experiment.log_metric(tag, value, step=train_batch_num*(epoch+1))
+                       # experiment.log_metric(tag, value, step=train_batch_num*(epoch+1))
                        logger.scalar_summary(tag, value, train_batch_num+1)
 
                     ## 2. Log values and gradients of the parameters (histogram summary)
-                    for tag, value in model.named_parameters():
-                        tag = tag.replace('.', '/')
-                        logger.histo_summary(tag, value.detach().cpu().numpy(), train_batch_num+1)
-                        logger.histo_summary(tag+'/grad', value.grad.detach().cpu().numpy(), train_batch_num+1)
+                    # for tag, value in model.named_parameters():
+                        # tag = tag.replace('.', '/')
+                        # logger.histo_summary(tag, value.detach().cpu().numpy(), train_batch_num+1)
+                        # logger.histo_summary(tag+'/grad', value.grad.detach().cpu().numpy(), train_batch_num+1)
 
                     train_running_loss = 0.0
                     beginning_time = time.time() 
                     train_running_accuracy = 0.0
-                optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
-        # del loss
-        # del accuracy
-        # del claims_tensors
-        # del claims_text
-        # del evidences_tensors
-        # del evidences_text
-        # del labels 
-        # del y
-        # del y_pred
-        # torch.cuda.empty_cache()
+        if args.eval_train:
+            print("Running validation on train...")
+            evaluate(model, train_eval_dataloader, criterion)
 
-
-        print("Running validation...")
-        model.eval()
-        pred = []
-        true = []
-        avg_loss = 0.0
-        val_running_accuracy = 0.0
-        val_running_loss = 0.0
-        beginning_time = time.time()
-        with experiment.validate():
-            for val_batch_num, val_inputs in enumerate(val_dataloader):
-                claims_tensors, claims_text, evidences_tensors, evidences_text, labels = val_inputs  
-
-                claims_tensors = claims_tensors.cuda()
-                evidences_tensors = evidences_tensors.cuda()
-                labels = labels.cuda()
-
-                y_pred = model(claims_tensors, evidences_tensors)
-
-                y = (labels)
-                # y_pred = parallel.gather(y_pred, 0)
-
-                y_pred = y_pred.squeeze()
-
-                loss = criterion(y_pred, torch.max(y,1)[1])
-
-                y = y.float()
-
-                binary_y = torch.max(y, 1)[1]
-                binary_pred = torch.max(y_pred, 1)[1]
-                true.extend(binary_y.tolist())
-                pred.extend(binary_pred.tolist())
-
-                accuracy = (binary_y==binary_pred).to("cuda")
-
-                accuracy = accuracy.float().mean()
-                val_running_accuracy += accuracy.item()
-                val_running_loss += loss.item() 
-                avg_loss += loss.item()
-
-                if (val_batch_num % OUTPUT_FREQ)==0 and val_batch_num>0:
-                    elapsed_time = time.time() - beginning_time
-                    print("[{}:{}:{:3f}s] validation loss: {}, accuracy: {}, recall: {}".format(epoch, val_batch_num / (len(val_dataset)/BATCH_SIZE), elapsed_time, val_running_loss/OUTPUT_FREQ, val_running_accuracy/OUTPUT_FREQ, recall_score(binary_y.cpu().detach().numpy(), binary_pred.cpu().detach().numpy())))
-
-                    # 1. Log scalar values (scalar summary)
-                    info = { 'val_accuracy': val_running_accuracy/OUTPUT_FREQ }
-
-                    for tag, value in info.items():
-                       experiment.log_metric(tag, value, step=val_batch_num*(epoch+1))
-                       logger.scalar_summary(tag, value, val_batch_num+1)
-
-                    ## 2. Log values and gradients of the parameters (histogram summary)
-                    for tag, value in model.named_parameters():
-                       tag = tag.replace('.', '/')
-                       logger.histo_summary(tag, value.detach().cpu().numpy(), val_batch_num+1)
-                       logger.histo_summary(tag+'/grad', value.grad.detach().cpu().numpy(), val_batch_num+1)
-
-                    val_running_accuracy = 0.0
-                    val_running_loss = 0.0
-                    beginning_time = time.time()
-
-        # del loss
-        # del accuracy
-        # del claims_tensors
-        # del claims_text
-        # del evidences_tensors
-        # del evidences_text
-        # del labels 
-        # del y
-        # del y_pred
-        # torch.cuda.empty_cache()
-
-        accuracy = accuracy_score(true, pred) 
-        print("[{}] mean accuracy: {}, mean loss: {}".format(epoch, accuracy, avg_loss / len(val_dataloader)))
-
-        true = np.array(true).astype("int") 
-        pred = np.array(pred).astype("int") 
-        print(classification_report(true, pred))
-
-        best_loss = torch.tensor(min(avg_loss / len(val_dataloader), best_loss.cpu().numpy()))
-        is_best = bool((avg_loss / len(val_dataloader)) <= best_loss)
+        print("Running validation on dev...")
+        acc, loss, recall_at_k, overall_recall_at_k = evaluate(model, val_dataloader, criterion)
+        metric = overall_recall_at_k[1][1] # recall @ 2
+        best_metric = max(metric, best_metric)
+        is_best = (metric >= best_metric)
         
-        putils.save_checkpoint({"epoch": epoch, "model": model, "best_loss": best_loss}, is_best, filename="{}_loss_{}".format(model_checkpoint_dir, best_loss.cpu().numpy()))
+        putils.save_checkpoint({"epoch": epoch, "model": model}, is_best, 
+                               filename=os.path.join(model_checkpoint_dir, "ep-{}_r@2-{:.6f}.pth".format(epoch+1, best_metric)))
+
+        if args.eval_test:
+            print("Running validation on test...")
+            evaluate(model, test_dataloader, criterion)
+
+
+def evaluate(model, val_dataloader, criterion):
+    model.eval()
+    pred = []
+    true = []
+    avg_loss = 0.0
+    val_running_accuracy = 0.0
+    val_running_loss = 0.0
+    beginning_time = time.time()
+    # with experiment.validate():
+
+    recall_intervals = [1,2,5,10,20]
+    recall = {}
+    overall_recall = {}
+    for i in recall_intervals:
+        recall[i] = []
+        overall_recall[i] = []
+
+    with torch.no_grad():
+        for val_batch_num, val_inputs in enumerate(tqdm(val_dataloader)):
+            claims_tensors, claims_text, evidences_tensors, evidences_text, labels = val_inputs  
+
+            claims_tensors = claims_tensors.cuda()
+            evidences_tensors = evidences_tensors.cuda()
+            labels = labels.cuda()
+
+            y_pred = model(claims_tensors, evidences_tensors)
+
+            y = (labels)
+            # y_pred = parallel.gather(y_pred, 0)
+
+            y_pred = y_pred.squeeze()
+
+            loss = criterion(y_pred, torch.max(y,1)[1])
+
+            y = y.float()
+
+            binary_y = torch.max(y, 1)[1]
+            y_pred = torch.exp(y_pred)
+            binary_pred = torch.max(y_pred, 1)[1]
+            true.extend(binary_y.tolist())
+            pred.extend(binary_pred.tolist())
+
+            accuracy = (binary_y==binary_pred).to("cuda")
+
+            accuracy = accuracy.float().mean()
+            val_running_accuracy += accuracy.item()
+            val_running_loss += loss.item() 
+            avg_loss += loss.item()
+
+            bin_acc = y_pred[:,1]
+            sorted_idxs = torch.sort(bin_acc, descending=True)[1]
+
+            relevant_evidences = []
+            for idx in range(y.shape[0]):
+                try:
+                    if int(y[idx][1]):
+                        relevant_evidences.append(evidences_text[idx])
+                except Exception as e:
+                    print(y, y[idx], idx)
+                    raise e
+
+            retrieved_evidences = []
+            for idx in sorted_idxs:
+                retrieved_evidences.append(evidences_text[idx])
+
+            for k in recall_intervals:
+                if len(relevant_evidences)==0:
+                    overall_recall[k].append(0.)
+                else:
+                    rec_k = calculate_recall(retrieved_evidences, relevant_evidences, k=k)
+                    recall[k].append(rec_k)
+                    overall_recall[k].append(rec_k)
+
+
+            # if (val_batch_num % OUTPUT_FREQ)==0 and val_batch_num>0:
+                # # elapsed_time = time.time() - beginning_time
+                # # print("[{}:{}:{:3f}s] validation loss: {}, accuracy: {}, recall: {}".format(epoch, val_batch_num / (len(val_dataset)/BATCH_SIZE), elapsed_time, val_running_loss/OUTPUT_FREQ, val_running_accuracy/OUTPUT_FREQ, recall_score(binary_y.cpu().detach().numpy(), binary_pred.cpu().detach().numpy())))
+
+                # # 1. Log scalar values (scalar summary)
+                # info = { 'val_accuracy': val_running_accuracy/OUTPUT_FREQ }
+
+                # for tag, value in info.items():
+                   # # experiment.log_metric(tag, value, step=val_batch_num*(epoch+1))
+                   # logger.scalar_summary(tag, value, val_batch_num+1)
+
+                # ## 2. Log values and gradients of the parameters (histogram summary)
+                # for tag, value in model.named_parameters():
+                   # tag = tag.replace('.', '/')
+                   # # logger.histo_summary(tag, value.detach().cpu().numpy(), val_batch_num+1)
+                   # # logger.histo_summary(tag+'/grad', value.grad.detach().cpu().numpy(), val_batch_num+1)
+
+                # val_running_accuracy = 0.0
+                # val_running_loss = 0.0
+                # beginning_time = time.time()
+
+
+    accuracy = accuracy_score(true, pred) 
+    avg_loss /= len(val_dataloader)
+    print("Mean accuracy: {:.5f}, mean loss: {:.5f}".format(accuracy, avg_loss))
+
+    true = np.array(true).astype("int") 
+    pred = np.array(pred).astype("int") 
+    print(classification_report(true, pred))
+
+    print('True: #0={}, #1={}'.format((true==0).sum(), (true==1).sum()))
+    print('Pred: #0={}, #1={}'.format((pred==0).sum(), (pred==1).sum()))
+
+    recall_at_k = [(k, np.mean(v)) for k, v in recall.items()]
+    overall_recall_at_k = [(k, np.mean(v)) for k, v in overall_recall.items()]
+    print("           {} | {}".format("nm_only", "overall"))
+    for (k, v1), (_, v2) in zip(recall_at_k, overall_recall_at_k):
+        print("Recall@{:>2}: {:.5f} | {:.5f}".format(k, v1, v2))
+
+    return accuracy, avg_loss, recall_at_k, overall_recall_at_k
+
 
 if __name__=="__main__":
     args = parse_args()
