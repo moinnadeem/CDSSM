@@ -62,7 +62,7 @@ python-dateutil==2.7.5
 python-slugify==1.2.6
 pytorchviz==0.0.1
 pytz==2018.7
-PyYAML==3.13
+PyYAML==5.4
 pyzmq==17.1.2
 requests==2.20.1
 scikit-learn==0.20.0
