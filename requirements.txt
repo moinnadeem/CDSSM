@@ -42,7 +42,7 @@ mistune==0.8.4
 nbconvert==5.4.0
 nbformat==4.4.0
 netifaces==0.10.9
-nltk==3.4
+nltk==3.6.6
 notebook==6.4.10
 numpy==1.15.4
 nvidia-ml-py3==7.352.0
